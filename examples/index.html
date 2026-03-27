@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>msp.js Demo</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="container">
+    <h1>msp.js Demo</h1>
+
+    <div class="main-content">
+      <div class="video-section">
+        <div id="videoContainer">
+          <video id="videoElement"></video>
+        </div>
+
+        <div class="player-controls">
+          <button id="playBtn">播放</button>
+          <button id="pauseBtn">暂停</button>
+          <button id="stopBtn">停止</button>
+          <button id="destroyBtn">销毁播放器</button>
+          <input
+            type="text"
+            id="streamUrl"
+            placeholder="输入 MPEG-TS 流地址"
+            value="http://192.168.88.91:7777/live/livestream1.live.ts"
+          >
+        </div>
+
+        <div class="status-bar">
+          <div class="status-item">
+            <span>播放器状态</span>
+            <strong id="playerStatus">未初始化</strong>
+          </div>
+          <div class="status-item">
+            <span>MSP 帧数</span>
+            <strong id="mspFrameCount">0</strong>
+          </div>
+          <div class="status-item">
+            <span>当前时间</span>
+            <strong id="currentTime">0.00s</strong>
+          </div>
+        </div>
+      </div>
+
+      <div class="control-panel">
+        <h2>渲染配置</h2>
+
+        <div class="control-group">
+          <h3>全局线宽</h3>
+          <input type="range" id="globalLineWidth" min="1" max="10" value="2">
+        </div>
+
+        <div class="control-group">
+          <h3>标签字段</h3>
+          <div class="checkbox-group">
+            <label>
+              <input type="checkbox" id="showType" checked>
+              显示类型
+            </label>
+            <label>
+              <input type="checkbox" id="showConfidence" checked>
+              显示置信度
+            </label>
+          </div>
+        </div>
+
+        <div class="control-group">
+          <h3>按类型配置</h3>
+          <div class="type-config">
+            <div class="type-config-item">
+              <div class="type-config-header">类型 1: 安全帽</div>
+              <label for="type1Color">颜色</label>
+              <input type="color" id="type1Color" value="#666666">
+            </div>
+
+            <div class="type-config-item">
+              <div class="type-config-header">类型 2: 人</div>
+              <label for="type2Color">颜色</label>
+              <input type="color" id="type2Color" value="#999999">
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="mpegts.js"></script>
+  <script src="../dist/msp.js"></script>
+
+  <script>
+    (function() {
+      const videoElement = document.getElementById('videoElement');
+      const streamUrlInput = document.getElementById('streamUrl');
+      const playBtn = document.getElementById('playBtn');
+      const pauseBtn = document.getElementById('pauseBtn');
+      const stopBtn = document.getElementById('stopBtn');
+      const destroyBtn = document.getElementById('destroyBtn');
+      const globalLineWidth = document.getElementById('globalLineWidth');
+      const showType = document.getElementById('showType');
+      const showConfidence = document.getElementById('showConfidence');
+      const type1Color = document.getElementById('type1Color');
+      const type2Color = document.getElementById('type2Color');
+      const playerStatus = document.getElementById('playerStatus');
+      const mspFrameCountElement = document.getElementById('mspFrameCount');
+      const currentTimeElement = document.getElementById('currentTime');
+
+      let player = null;
+      let mspFrameCount = 0;
+      let currentUrl = '';
+
+      const overlay = new msp.MSPOverlay({
+        maxDetectionFrames: 100,
+        lineWidth: 2,
+        labelFields: ['type', 'confidence']
+      });
+
+      overlay.attachMedia(videoElement);
+
+      function updateStatus(status) {
+        playerStatus.textContent = status;
+      }
+
+      function updateFrameCount() {
+        mspFrameCountElement.textContent = String(mspFrameCount);
+      }
+
+      function resetOverlayData() {
+        overlay.clear();
+        mspFrameCount = 0;
+        updateFrameCount();
+      }
+
+      function updateLabelFields() {
+        const fields = [];
+        if (showType.checked) fields.push('type');
+        if (showConfidence.checked) fields.push('confidence');
+        overlay.configure({ labelFields: fields });
+      }
+
+      function updateTypeColors() {
+        overlay.configure({
+          typeConfigs: {
+            1: {
+              boxColor: type1Color.value
+            },
+            2: {
+              boxColor: type2Color.value
+            }
+          }
+        });
+      }
+
+      function destroyPlayer() {
+        if (!player) {
+          return;
+        }
+
+        player.destroy();
+        player = null;
+      }
+
+      function createPlayer(url) {
+        player = mpegts.createPlayer({
+          type: 'mse',
+          isLive: true,
+          url
+        });
+
+        player.attachMediaElement(videoElement);
+
+        player.on(mpegts.Events.ERROR, function(errorType, errorDetail, errorInfo) {
+          console.error('Player error:', errorType, errorDetail, errorInfo);
+          updateStatus('错误: ' + errorDetail);
+        });
+
+        player.on(mpegts.Events.LOADING_COMPLETE, function() {
+          updateStatus('加载完成');
+        });
+
+        player.on(mpegts.Events.MEDIA_INFO, function(mediaInfo) {
+          console.log('Media info:', mediaInfo);
+          updateStatus('媒体信息已加载');
+        });
+
+        player.on(mpegts.Events.SEI_ARRIVED, function(data) {
+          overlay.pushData(data);
+          mspFrameCount += 1;
+          updateFrameCount();
+        });
+
+        player.load();
+        currentUrl = url;
+      }
+
+      videoElement.addEventListener('timeupdate', function() {
+        currentTimeElement.textContent = videoElement.currentTime.toFixed(2) + 's';
+      });
+
+      playBtn.onclick = function() {
+        const url = streamUrlInput.value.trim();
+
+        if (!url) {
+          alert('请输入流地址');
+          return;
+        }
+
+        if (typeof mpegts === 'undefined') {
+          alert('mpegts.js 未加载，请检查示例文件');
+          return;
+        }
+
+        if (!mpegts.getFeatureList().mseLivePlayback) {
+          alert('当前浏览器不支持 MSE');
+          return;
+        }
+
+        if (!player || currentUrl !== url) {
+          destroyPlayer();
+          resetOverlayData();
+          createPlayer(url);
+          updateStatus('已加载');
+        }
+
+        player.play();
+        overlay.show();
+        updateStatus('播放中');
+      };
+
+      pauseBtn.onclick = function() {
+        if (!player) {
+          return;
+        }
+
+        player.pause();
+        updateStatus('已暂停');
+      };
+
+      stopBtn.onclick = function() {
+        if (!player) {
+          return;
+        }
+
+        player.pause();
+        player.unload();
+        resetOverlayData();
+        currentUrl = '';
+        updateStatus('已停止');
+      };
+
+      destroyBtn.onclick = function() {
+        destroyPlayer();
+        resetOverlayData();
+        currentUrl = '';
+        updateStatus('已销毁');
+      };
+
+      globalLineWidth.oninput = function(event) {
+        overlay.configure({ lineWidth: parseInt(event.target.value, 10) });
+      };
+
+      showType.onchange = updateLabelFields;
+      showConfidence.onchange = updateLabelFields;
+      type1Color.oninput = updateTypeColors;
+      type2Color.oninput = updateTypeColors;
+
+      window.addEventListener('beforeunload', function() {
+        destroyPlayer();
+        overlay.detachMedia();
+      });
+
+      updateStatus('未初始化');
+      updateFrameCount();
+      updateLabelFields();
+      updateTypeColors();
+    })();
+  </script>
+</body>
+</html>

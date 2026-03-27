@@ -1,0 +1,9 @@
+src/
+test/
+.editorconfig
+.gitignore
+vite.config.mjs
+vite.config.module.mjs
+vitest.config.mjs
+tsconfig.json
+yarn.lock

@@ -1,0 +1,47 @@
+{
+  "name": "msp.js",
+  "version": "1.0.0",
+  "main": "./dist/index.js",
+  "umd:main": "./dist/msp.js",
+  "module": "./dist/index.mjs",
+  "files": [
+    "dist",
+    "src",
+    "tsconfig.json"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/types/index.d.ts",
+      "umd": "./dist/msp.js",
+      "import": "./dist/es/index.mjs",
+      "require": "./dist/cjs/index.js"
+    }
+  },
+  "author": "",
+  "description": "msp.js: Metadata over SEI Protocol (MSP) parsing and overlay rendering library for video streams",
+  "keywords": ["msp", "metadata-over-sei-protocol", "sei", "h264", "h265", "video", "overlay"],
+  "repository": {
+    "type": "git",
+    "url": ""
+  },
+  "license": "MIT",
+  "scripts": {
+    "prebuild": "rimraf dist",
+    "clean": "rimraf dist",
+    "build": "vite build",
+    "build:module": "vite build --config vite.config.module.mjs",
+    "build:tsc": "tsc",
+    "build:all": "rimraf dist && tsc && vite build && vite build --config vite.config.module.mjs",
+    "test": "vitest",
+    "dev": "vite build --watch",
+    "prepublishOnly": "rimraf dist && tsc && vite build && vite build --config vite.config.module.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.8",
+    "jsdom": "^25.0.0",
+    "rimraf": "^6.0.1",
+    "typescript": "^5.7.2",
+    "vite": "^5.4.10",
+    "vitest": "^2.1.4"
+  }
+}
