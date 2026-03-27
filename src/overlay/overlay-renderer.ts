@@ -1,4 +1,5 @@
 import type { MSPData, MSPDetection } from '../parser/parser';
+import { getTypeLabel } from './type-labels';
 
 export interface TypeConfig {
   boxColor?: string;
@@ -13,11 +14,6 @@ export interface OverlayRendererConfig {
   labelFields?: Array<'type' | 'confidence' | 'bbox'>;
   typeConfigs?: Record<number, TypeConfig>;
 }
-
-const TYPE_LABELS: Record<number, string> = {
-  1: '安全帽',
-  2: '人'
-};
 
 type VideoRect = {
   x: number;
@@ -280,7 +276,7 @@ export class OverlayRenderer {
     fields.forEach((field) => {
       switch (field) {
         case 'type':
-          parts.push(TYPE_LABELS[detection.type] || `${detection.type}`);
+          parts.push(getTypeLabel(detection.type));
           break;
         case 'confidence':
           parts.push(`${detection.confidence.toFixed(2)}`);

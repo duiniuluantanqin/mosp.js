@@ -8,8 +8,6 @@
 </head>
 <body>
   <div class="container">
-    <h1>msp.js Demo</h1>
-
     <div class="main-content">
       <div class="video-section">
         <div id="videoContainer">
@@ -20,6 +18,7 @@
           <button id="playBtn">播放</button>
           <button id="pauseBtn">暂停</button>
           <button id="stopBtn">停止</button>
+          <button id="fullscreenBtn">全屏</button>
           <button id="destroyBtn">销毁播放器</button>
           <input
             type="text"
@@ -49,11 +48,6 @@
         <h2>渲染配置</h2>
 
         <div class="control-group">
-          <h3>全局线宽</h3>
-          <input type="range" id="globalLineWidth" min="1" max="10" value="2">
-        </div>
-
-        <div class="control-group">
           <h3>标签字段</h3>
           <div class="checkbox-group">
             <label>
@@ -65,6 +59,14 @@
               显示置信度
             </label>
           </div>
+
+          <div class="slider-control">
+            <div class="slider-control-header">
+              <label for="globalLineWidth">线宽</label>
+              <span class="value-display" id="globalLineWidthValue">2</span>
+            </div>
+            <input type="range" id="globalLineWidth" min="1" max="10" value="2">
+          </div>
         </div>
 
         <div class="control-group">
@@ -72,14 +74,40 @@
           <div class="type-config">
             <div class="type-config-item">
               <div class="type-config-header">类型 1: 安全帽</div>
-              <label for="type1Color">颜色</label>
-              <input type="color" id="type1Color" value="#666666">
+              <label for="type1ColorSelect">颜色</label>
+              <div class="color-select-row">
+                <span class="color-swatch" id="type1ColorSwatch" aria-hidden="true"></span>
+                <select id="type1ColorSelect" data-target-color="type1Color">
+                  <option value="#ff4d4f" style="color: #ff4d4f;">■ 红色</option>
+                  <option value="#fa8c16" style="color: #fa8c16;">■ 橙色</option>
+                  <option value="#fadb14" style="color: #ad8b00;">■ 黄色</option>
+                  <option value="#52c41a" style="color: #52c41a;">■ 绿色</option>
+                  <option value="#13c2c2" style="color: #13c2c2;">■ 青色</option>
+                  <option value="#1677ff" style="color: #1677ff;">■ 蓝色</option>
+                  <option value="#722ed1" style="color: #722ed1;">■ 紫色</option>
+                  <option value="custom">■ 自定义</option>
+                </select>
+                <input type="color" id="type1Color" value="#666666" class="custom-color-input" aria-label="类型 1 颜色">
+              </div>
             </div>
 
             <div class="type-config-item">
               <div class="type-config-header">类型 2: 人</div>
-              <label for="type2Color">颜色</label>
-              <input type="color" id="type2Color" value="#999999">
+              <label for="type2ColorSelect">颜色</label>
+              <div class="color-select-row">
+                <span class="color-swatch" id="type2ColorSwatch" aria-hidden="true"></span>
+                <select id="type2ColorSelect" data-target-color="type2Color">
+                  <option value="#ff4d4f" style="color: #ff4d4f;">■ 红色</option>
+                  <option value="#fa8c16" style="color: #fa8c16;">■ 橙色</option>
+                  <option value="#fadb14" style="color: #ad8b00;">■ 黄色</option>
+                  <option value="#52c41a" style="color: #52c41a;">■ 绿色</option>
+                  <option value="#13c2c2" style="color: #13c2c2;">■ 青色</option>
+                  <option value="#1677ff" style="color: #1677ff;">■ 蓝色</option>
+                  <option value="#722ed1" style="color: #722ed1;">■ 紫色</option>
+                  <option value="custom">■ 自定义</option>
+                </select>
+                <input type="color" id="type2Color" value="#999999" class="custom-color-input" aria-label="类型 2 颜色">
+              </div>
             </div>
           </div>
         </div>
@@ -97,12 +125,16 @@
       const playBtn = document.getElementById('playBtn');
       const pauseBtn = document.getElementById('pauseBtn');
       const stopBtn = document.getElementById('stopBtn');
+      const fullscreenBtn = document.getElementById('fullscreenBtn');
       const destroyBtn = document.getElementById('destroyBtn');
+      const videoContainer = document.getElementById('videoContainer');
       const globalLineWidth = document.getElementById('globalLineWidth');
+      const globalLineWidthValue = document.getElementById('globalLineWidthValue');
       const showType = document.getElementById('showType');
       const showConfidence = document.getElementById('showConfidence');
       const type1Color = document.getElementById('type1Color');
       const type2Color = document.getElementById('type2Color');
+      const colorSelects = Array.from(document.querySelectorAll('[data-target-color]'));
       const playerStatus = document.getElementById('playerStatus');
       const mspFrameCountElement = document.getElementById('mspFrameCount');
       const currentTimeElement = document.getElementById('currentTime');
@@ -151,6 +183,89 @@
             }
           }
         });
+      }
+
+      function updateColorSwatch(selectElement, colorValue) {
+        const swatch = document.getElementById(selectElement.id.replace('Select', 'Swatch'));
+
+        if (!swatch) {
+          return;
+        }
+
+        swatch.style.backgroundColor = colorValue;
+      }
+
+      function syncColorSelect(selectElement, colorValue) {
+        const normalizedColor = colorValue.toLowerCase();
+        const matchedOption = Array.from(selectElement.options).find(function(option) {
+          return option.value.toLowerCase() === normalizedColor;
+        });
+
+        selectElement.value = matchedOption ? matchedOption.value : 'custom';
+        updateColorSwatch(selectElement, colorValue);
+      }
+
+      function bindColorSelect(selectElement) {
+        const colorInput = document.getElementById(selectElement.dataset.targetColor);
+
+        syncColorSelect(selectElement, colorInput.value);
+
+        selectElement.addEventListener('change', function() {
+          if (selectElement.value === 'custom') {
+            colorInput.click();
+            return;
+          }
+
+          colorInput.value = selectElement.value;
+          syncColorSelect(selectElement, colorInput.value);
+          updateTypeColors();
+        });
+
+        colorInput.addEventListener('input', function() {
+          syncColorSelect(selectElement, colorInput.value);
+          updateTypeColors();
+        });
+
+        colorInput.addEventListener('change', function() {
+          syncColorSelect(selectElement, colorInput.value);
+          updateTypeColors();
+        });
+      }
+
+      function getFullscreenElement() {
+        return document.fullscreenElement || document.webkitFullscreenElement || null;
+      }
+
+      function isVideoContainerFullscreen() {
+        return getFullscreenElement() === videoContainer;
+      }
+
+      function updateFullscreenButton() {
+        fullscreenBtn.textContent = isVideoContainerFullscreen() ? '退出全屏' : '全屏';
+      }
+
+      function requestContainerFullscreen() {
+        if (videoContainer.requestFullscreen) {
+          return videoContainer.requestFullscreen();
+        }
+
+        if (videoContainer.webkitRequestFullscreen) {
+          return videoContainer.webkitRequestFullscreen();
+        }
+
+        return Promise.reject(new Error('Fullscreen API is not supported'));
+      }
+
+      function exitFullscreen() {
+        if (document.exitFullscreen) {
+          return document.exitFullscreen();
+        }
+
+        if (document.webkitExitFullscreen) {
+          return document.webkitExitFullscreen();
+        }
+
+        return Promise.reject(new Error('Fullscreen exit is not supported'));
       }
 
       function destroyPlayer() {
@@ -250,6 +365,15 @@
         updateStatus('已停止');
       };
 
+      fullscreenBtn.onclick = function() {
+        const action = isVideoContainerFullscreen() ? exitFullscreen() : requestContainerFullscreen();
+
+        Promise.resolve(action).catch(function(error) {
+          console.error('Fullscreen error:', error);
+          alert('当前环境不支持全屏或切换失败');
+        });
+      };
+
       destroyBtn.onclick = function() {
         destroyPlayer();
         resetOverlayData();
@@ -258,13 +382,23 @@
       };
 
       globalLineWidth.oninput = function(event) {
+        globalLineWidthValue.textContent = event.target.value;
         overlay.configure({ lineWidth: parseInt(event.target.value, 10) });
       };
 
       showType.onchange = updateLabelFields;
       showConfidence.onchange = updateLabelFields;
-      type1Color.oninput = updateTypeColors;
-      type2Color.oninput = updateTypeColors;
+      colorSelects.forEach(bindColorSelect);
+
+      document.addEventListener('fullscreenchange', function() {
+        updateFullscreenButton();
+        window.dispatchEvent(new Event('resize'));
+      });
+
+      document.addEventListener('webkitfullscreenchange', function() {
+        updateFullscreenButton();
+        window.dispatchEvent(new Event('resize'));
+      });
 
       window.addEventListener('beforeunload', function() {
         destroyPlayer();
@@ -274,7 +408,9 @@
       updateStatus('未初始化');
       updateFrameCount();
       updateLabelFields();
+      globalLineWidthValue.textContent = globalLineWidth.value;
       updateTypeColors();
+      updateFullscreenButton();
     })();
   </script>
 </body>

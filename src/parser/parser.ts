@@ -1,3 +1,10 @@
+import {
+  buffersAreEqual,
+  quantizedByteToUnit,
+  quantizedWordToUnit,
+  readUint16BE
+} from '../utils/utils';
+
 export interface MSPDetection {
   type: number;
   confidence: number;
@@ -22,7 +29,7 @@ export interface SEIData {
   pts?: number;
 }
 
-const COMPACT_PAYLOAD_V2_UUID = new Uint8Array([
+const MSP_UUID_V1 = new Uint8Array([
   0x83, 0xA1, 0x61, 0xC4,
   0x31, 0xA7, 0x4B, 0xD8,
   0xA6, 0x93, 0x52, 0x11,
@@ -44,11 +51,11 @@ export class MSPParser {
 
   private parseFromSEIData(seiData: SEIData): MSPData | null {
     try {
-      if (!this.buffersAreEqual(seiData.uuid, COMPACT_PAYLOAD_V2_UUID)) {
+      if (!buffersAreEqual(seiData.uuid, MSP_UUID_V1)) {
         return null;
       }
 
-      const detections = this.parseCompactPayloadV2(seiData.user_data);
+      const detections = this.parseMSP_V1(seiData.user_data);
       if (!detections || detections.length === 0) {
         return null;
       }
@@ -63,7 +70,7 @@ export class MSPParser {
     }
   }
 
-  private parseCompactPayloadV2(payload: Uint8Array): MSPDetection[] | null {
+  private parseMSP_V1(payload: Uint8Array): MSPDetection[] | null {
     if (!payload || payload.byteLength < 6) {
       return null;
     }
@@ -88,21 +95,21 @@ export class MSPParser {
     let offset = 6;
 
     for (let i = 0; i < availableObjectCount; i++) {
-      const objectType = this.readUint16BE(payload, offset + 1);
+      const objectType = readUint16BE(payload, offset + 1);
       const confidenceQ = payload[offset + 3];
-      const xQ = this.readUint16BE(payload, offset + 4);
-      const yQ = this.readUint16BE(payload, offset + 6);
-      const wQ = this.readUint16BE(payload, offset + 8);
-      const hQ = this.readUint16BE(payload, offset + 10);
+      const xQ = readUint16BE(payload, offset + 4);
+      const yQ = readUint16BE(payload, offset + 6);
+      const wQ = readUint16BE(payload, offset + 8);
+      const hQ = readUint16BE(payload, offset + 10);
 
       detections.push({
         type: objectType,
-        confidence: this.quantizedByteToUnit(confidenceQ),
+        confidence: quantizedByteToUnit(confidenceQ),
         bbox: {
-          x: this.quantizedWordToUnit(xQ),
-          y: this.quantizedWordToUnit(yQ),
-          width: this.quantizedWordToUnit(wQ),
-          height: this.quantizedWordToUnit(hQ)
+          x: quantizedWordToUnit(xQ),
+          y: quantizedWordToUnit(yQ),
+          width: quantizedWordToUnit(wQ),
+          height: quantizedWordToUnit(hQ)
         }
       });
 
@@ -110,31 +117,5 @@ export class MSPParser {
     }
 
     return detections;
-  }
-
-  private readUint16BE(data: Uint8Array, offset: number): number {
-    return (data[offset] << 8) | data[offset + 1];
-  }
-
-  private quantizedByteToUnit(value: number): number {
-    return value / 255;
-  }
-
-  private quantizedWordToUnit(value: number): number {
-    return value / 65535;
-  }
-
-  private buffersAreEqual(a: Uint8Array, b: Uint8Array): boolean {
-    if (a.byteLength !== b.byteLength) {
-      return false;
-    }
-
-    for (let i = 0; i < a.byteLength; i++) {
-      if (a[i] !== b[i]) {
-        return false;
-      }
-    }
-
-    return true;
   }
 }

@@ -1,0 +1,209 @@
+MSP — Metadata over SEI Protocol
+
+Abstract
+
+This document defines MSP, an in-band video metadata protocol that embeds structured metadata into H.264 and H.265 video streams using SEI user_data_unregistered messages (payload type 5). The protocol enables frame-synchronous metadata transport without requiring out-of-band signaling channels.
+
+Status of This Memo
+
+This document is an informational specification describing the MSP protocol. It may be updated or extended in future versions.
+
+1. Introduction
+
+Modern video processing systems often require auxiliary metadata to be tightly synchronized with video frames. Existing approaches rely on out-of-band signaling or container-based metadata, which introduce latency and complexity.
+
+MSP defines an in-band mechanism for embedding structured metadata directly within video elementary streams using SEI messages. This allows metadata to travel alongside video frames with minimal overhead and precise synchronization.
+
+2. Terminology
+
+In-band
+Metadata transported within the same elementary stream as video
+
+SEI
+Supplemental Enhancement Information in H.264/H.265
+
+user_data_unregistered
+SEI payload type 5 identified by UUID
+
+Frame-synchronous
+Metadata aligned with a specific decoded video frame
+
+Payload
+Binary data carried inside SEI
+
+3. Overview
+
+MSP operates as an in-band metadata encapsulation protocol carried within video streams.
+
+Each metadata unit is encapsulated inside an SEI user_data_unregistered message and associated with a specific video frame.
+
+The protocol is designed to be lightweight, extensible, and independent of higher-level transport mechanisms.
+
+4. Protocol Operation
+
+4.1 General
+
+A sender embeds MSP payload into SEI messages within the video stream.
+
+A receiver extracts SEI messages, identifies MSP payload using UUID, and parses the metadata.
+
+4.2 Encapsulation
+
+Each MSP message SHALL be carried in a single SEI user_data_unregistered message.
+
+The SEI payload SHALL be structured as:
+
+UUID
+MSP payload
+
+4.3 UUID Identification
+
+The following UUID is assigned to MSP:
+
+6368622d-564d5350-2d76312d-000000000001
+
+Receivers MUST use the UUID to determine whether the SEI payload contains MSP data.
+
+4.4 MSP Payload Format
+
+MSP payload is a compact binary structure designed for in-band transmission inside SEI user_data_unregistered (payload type 5).
+
+The payload layout is defined as follows:
+
+  0                   1                   2                   3
+  0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+ +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ |  version (=2)  | object_count  |         timestamp[31..16]     |
+ +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ |         timestamp[15..0]       |   (objects... continues)      |
+ +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+
+Fields:
+
+1. version (u8)
+2. object_count (u8)
+3. timestamp (u32, big-endian)
+4. objects (array of object_count entries, each 12 bytes)
+
+Header:
+
+- version
+  Fixed value 2.
+
+- object_count
+  Number of objects encoded in the payload.
+  Valid range is 0 to 255.
+
+- timestamp
+  32-bit unsigned timestamp encoded in network byte order (big-endian).
+
+Implementation note:
+
+- If the number of detected objects exceeds 255, only the first 255 objects SHALL be encoded.
+
+---
+
+4.4.1 Object Record (12 bytes)
+
+Each object is serialized using the following layout:
+
+  0                   1                   2                   3
+  0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+ +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ |   object_id    |              type             | confidence_q |
+ +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ |              x_q              |              y_q              |
+ +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ |              w_q              |              h_q              |
+ +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+
+Fields:
+
+1. object_id (u8)
+2. type (u16, big-endian)
+3. confidence_q (u8)
+4. x_q (u16, big-endian)
+5. y_q (u16, big-endian)
+6. w_q (u16, big-endian)
+7. h_q (u16, big-endian)
+
+object_id semantics:
+
+- 0 to 254: valid object identifier
+- 255: invalid, missing, or overflow identifier
+
+---
+
+4.4.2 Quantization Rules
+
+Input values are expected to be normalized to the range [0, 1].
+
+4.4.3 Confidence
+
+Encoding:
+confidence_q = round(clamp(confidence, 0, 1) * 255)
+
+Decoding:
+confidence = confidence_q / 255.0
+
+---
+
+4.4.4 Bounding Box
+
+Applied independently to x, y, w, h:
+
+Encoding:
+q = round(clamp(v, 0, 1) * 65535)
+
+Decoding:
+v = q / 65535.0
+
+---
+
+4.4.5 Length Calculation
+
+Let N = object_count.
+
+- MSP payload size:
+  6 + 12 * N bytes
+
+- Full SEI user_data_unregistered payload size:
+  16 + 6 + 12 * N bytes
+
+Where:
+
+- 16 bytes = UUID
+- remaining bytes = MSP payload
+
+4.5 Synchronization
+
+Each MSP message is associated with the video frame that carries the SEI.
+
+When available, presentation timestamps SHOULD be used for alignment.
+
+5. Protocol Extensions
+
+Future extensions MAY introduce additional payload types, flags, or optional fields.
+
+Receivers MUST ignore unknown extensions.
+
+6. Security Considerations
+
+Implementations SHOULD validate payload size and structure to prevent malformed data and buffer overflow.
+
+Since MSP is in-band, corrupted metadata may affect decoding pipelines and SHOULD be handled safely.
+
+7. IANA Considerations
+
+This document does not define any IANA registries.
+
+Future versions MAY define namespace or identifier registries for MSP extensions.
+
+8. Acknowledgements
+
+This protocol design is inspired by existing in-band metadata systems and video signaling mechanisms.
+
+9. References
+
+H.264 and H.265 specifications
+SEI user_data_unregistered definition
