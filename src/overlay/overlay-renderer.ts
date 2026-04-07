@@ -179,7 +179,7 @@ export class OverlayRenderer {
   pushFrame(frame: MSPData): void {
     this.frames.push(frame);
 
-    if (this.frames.length > this.config.maxDetectionFrames) {
+    while (this.frames.length > this.config.maxDetectionFrames) {
       this.frames.shift();
     }
 
