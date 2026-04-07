@@ -1,5 +1,5 @@
 import { MSPParser } from '../parser/parser';
-import { OverlayRenderer, OverlayRendererConfig } from './overlay-renderer';
+import { OverlayDebugInfo, OverlayRenderer, OverlayRendererConfig } from './overlay-renderer';
 
 export class MSPOverlay {
   private parser: MSPParser;
@@ -39,5 +39,9 @@ export class MSPOverlay {
 
   clear(): void {
     this.renderer.clear();
+  }
+
+  getDebugInfo(): OverlayDebugInfo {
+    return this.renderer.getDebugInfo();
   }
 }

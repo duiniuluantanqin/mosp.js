@@ -12,6 +12,36 @@
       <div class="video-section">
         <div id="videoContainer">
           <video id="videoElement"></video>
+
+          <div class="debug-panel" id="debugPanel">
+            <h3>时间戳调试</h3>
+            <div class="debug-grid">
+              <div class="debug-item">
+                <span class="debug-label">视频时间戳</span>
+                <span class="debug-value" id="videoTimestamp">--</span>
+              </div>
+              <div class="debug-item">
+                <span class="debug-label">SEI 时间戳</span>
+                <span class="debug-value" id="seiTimestamp">--</span>
+              </div>
+              <div class="debug-item">
+                <span class="debug-label">差值</span>
+                <span class="debug-value" id="timestampDiff">--</span>
+              </div>
+              <div class="debug-item">
+                <span class="debug-label">命中/缓冲帧数</span>
+                <span class="debug-value" id="bufferedFrames">--/--</span>
+              </div>
+              <div class="debug-item">
+                <span class="debug-label">第一帧时间戳</span>
+                <span class="debug-value" id="firstBufferedTimestamp">--</span>
+              </div>
+              <div class="debug-item">
+                <span class="debug-label">最后一帧时间戳</span>
+                <span class="debug-value" id="lastBufferedTimestamp">--</span>
+              </div>
+            </div>
+          </div>
         </div>
 
         <div class="player-controls">
@@ -20,6 +50,7 @@
           <button id="stopBtn">停止</button>
           <button id="fullscreenBtn">全屏</button>
           <button id="destroyBtn">销毁播放器</button>
+          <button id="toggleDebugBtn">关闭调试面板</button>
           <input
             type="text"
             id="streamUrl"
@@ -56,8 +87,15 @@
             </div>
             <input type="range" id="globalLineWidth" min="1" max="10" value="2">
           </div>
-        </div>
 
+          <div class="slider-control">
+            <div class="slider-control-header">
+              <label for="maxDetectionFrames">最大检测帧缓存</label>
+              <span class="value-display" id="maxDetectionFramesValue">400</span>
+            </div>
+            <input type="range" id="maxDetectionFrames" min="100" max="1000" step="100" value="400">
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -74,18 +112,30 @@
       const stopBtn = document.getElementById('stopBtn');
       const fullscreenBtn = document.getElementById('fullscreenBtn');
       const destroyBtn = document.getElementById('destroyBtn');
+      const toggleDebugBtn = document.getElementById('toggleDebugBtn');
       const videoContainer = document.getElementById('videoContainer');
+      const debugPanel = document.getElementById('debugPanel');
       const globalLineWidth = document.getElementById('globalLineWidth');
       const globalLineWidthValue = document.getElementById('globalLineWidthValue');
+      const maxDetectionFrames = document.getElementById('maxDetectionFrames');
+      const maxDetectionFramesValue = document.getElementById('maxDetectionFramesValue');
       const showObjectId = document.getElementById('showObjectId');
       const showType = document.getElementById('showType');
       const showConfidence = document.getElementById('showConfidence');
+      const videoTimestamp = document.getElementById('videoTimestamp');
+      const seiTimestamp = document.getElementById('seiTimestamp');
+      const timestampDiff = document.getElementById('timestampDiff');
+      const bufferedFrames = document.getElementById('bufferedFrames');
+      const firstBufferedTimestamp = document.getElementById('firstBufferedTimestamp');
+      const lastBufferedTimestamp = document.getElementById('lastBufferedTimestamp');
 
       let player = null;
       let currentUrl = '';
+      let debugPanelRafId = null;
+      let debugPanelVisible = true;
 
       const overlay = new msp.MSPOverlay({
-        maxDetectionFrames: 100,
+        maxDetectionFrames: 400,
         lineWidth: 2,
         labelFields: ['object_id', 'type', 'confidence']
       });
@@ -102,6 +152,73 @@
         if (showType.checked) fields.push('type');
         if (showConfidence.checked) fields.push('confidence');
         overlay.configure({ labelFields: fields });
+      }
+
+      function formatTimestamp(ms) {
+        if (typeof ms !== 'number' || !Number.isFinite(ms)) {
+          return '--';
+        }
+
+        const totalMs = Math.max(0, Math.floor(ms));
+        const hours = Math.floor(totalMs / 3600000);
+        const minutes = Math.floor((totalMs % 3600000) / 60000);
+        const seconds = Math.floor((totalMs % 60000) / 1000);
+        const millis = totalMs % 1000;
+
+        const pad2 = (v) => v.toString().padStart(2, '0');
+        const pad3 = (v) => v.toString().padStart(3, '0');
+
+        return `${pad2(hours)}:${pad2(minutes)}:${pad2(seconds)}.${pad3(millis)}`;
+      }
+
+      function formatDiff(ms) {
+        if (typeof ms !== 'number' || !Number.isFinite(ms)) {
+          return '--';
+        }
+
+        return (ms >= 0 ? '+' : '') + ms.toFixed(1) + ' ms';
+      }
+
+      function renderDebugPanel() {
+        const debugInfo = overlay.getDebugInfo();
+        const matchedFramesText = debugInfo.matchedFrameIndex === null
+          ? `--/${debugInfo.bufferedFrames}`
+          : `${debugInfo.matchedFrameIndex}/${debugInfo.bufferedFrames}`;
+
+        videoTimestamp.textContent = formatTimestamp(debugInfo.videoCurrentTimeMs);
+        seiTimestamp.textContent = formatTimestamp(debugInfo.seiPtsMs);
+        timestampDiff.textContent = formatDiff(debugInfo.diffMs);
+        bufferedFrames.textContent = matchedFramesText;
+        firstBufferedTimestamp.textContent = formatTimestamp(debugInfo.firstBufferedPtsMs);
+        lastBufferedTimestamp.textContent = formatTimestamp(debugInfo.lastBufferedPtsMs);
+        debugPanelRafId = requestAnimationFrame(renderDebugPanel);
+      }
+
+      function startDebugPanel() {
+        if (debugPanelRafId !== null) {
+          return;
+        }
+
+        renderDebugPanel();
+      }
+
+      function stopDebugPanel() {
+        if (debugPanelRafId === null) {
+          return;
+        }
+
+        cancelAnimationFrame(debugPanelRafId);
+        debugPanelRafId = null;
+      }
+
+      function updateDebugToggleButton() {
+        toggleDebugBtn.textContent = debugPanelVisible ? '关闭调试面板' : '打开调试面板';
+      }
+
+      function setDebugPanelVisible(visible) {
+        debugPanelVisible = visible;
+        debugPanel.classList.toggle('hidden', !visible);
+        updateDebugToggleButton();
       }
 
       function getFullscreenElement() {
@@ -152,6 +269,10 @@
       function createPlayer(url) {
         player = mpegts.createPlayer({
           type: 'mse',
+          enableWorker: true,
+          lazyLoadMaxDuration: 3 * 60,
+          seekType: 'range',
+          liveBufferLatencyChasing: true,
           isLive: true,
           url
         });
@@ -236,9 +357,18 @@
         currentUrl = '';
       };
 
+      toggleDebugBtn.onclick = function() {
+        setDebugPanelVisible(!debugPanelVisible);
+      };
+
       globalLineWidth.oninput = function(event) {
         globalLineWidthValue.textContent = event.target.value;
         overlay.configure({ lineWidth: parseInt(event.target.value, 10) });
+      };
+
+      maxDetectionFrames.oninput = function(event) {
+        maxDetectionFramesValue.textContent = event.target.value;
+        overlay.configure({ maxDetectionFrames: parseInt(event.target.value, 10) });
       };
 
       showObjectId.onchange = updateLabelFields;
@@ -256,13 +386,17 @@
       });
 
       window.addEventListener('beforeunload', function() {
+        stopDebugPanel();
         destroyPlayer();
         overlay.detachMedia();
       });
 
       updateLabelFields();
       globalLineWidthValue.textContent = globalLineWidth.value;
+      maxDetectionFramesValue.textContent = maxDetectionFrames.value;
       updateFullscreenButton();
+      setDebugPanelVisible(true);
+      startDebugPanel();
     })();
   </script>
 </body>

@@ -25,6 +25,17 @@ export interface OverlayRendererConfig {
   textConfig?: TextConfig;
 }
 
+export interface OverlayDebugInfo {
+  videoCurrentTimeMs: number | null;
+  seiPtsMs: number | null;
+  diffMs: number | null;
+  bufferedFrames: number;
+  firstBufferedPtsMs: number | null;
+  lastBufferedPtsMs: number | null;
+  matchedFrameIndex: number | null;
+  paused: boolean;
+}
+
 type VideoRect = {
   x: number;
   y: number;
@@ -54,6 +65,16 @@ export class OverlayRenderer {
   private animationFrameId: number | null = null;
   private pausedFrame: MSPData | null = null;
   private assignedTypeColors = new Map<string, string>();
+  private debugInfo: OverlayDebugInfo = {
+    videoCurrentTimeMs: null,
+    seiPtsMs: null,
+    diffMs: null,
+    bufferedFrames: 0,
+    firstBufferedPtsMs: null,
+    lastBufferedPtsMs: null,
+    matchedFrameIndex: null,
+    paused: false
+  };
 
   private config: {
     maxDetectionFrames: number;
@@ -161,6 +182,11 @@ export class OverlayRenderer {
     if (this.frames.length > this.config.maxDetectionFrames) {
       this.frames.shift();
     }
+
+    this.debugInfo.bufferedFrames = this.frames.length;
+    this.debugInfo.firstBufferedPtsMs = this.frames[0]?.pts ?? null;
+    this.debugInfo.lastBufferedPtsMs = this.frames[this.frames.length - 1]?.pts ?? null;
+    this.debugInfo.matchedFrameIndex = null;
   }
 
   configure(config: OverlayRendererConfig): void {
@@ -206,7 +232,31 @@ export class OverlayRenderer {
     this.frames = [];
     this.pausedFrame = null;
     this.assignedTypeColors.clear();
+    this.debugInfo = {
+      videoCurrentTimeMs: this.getCurrentTimeMs(),
+      seiPtsMs: null,
+      diffMs: null,
+      bufferedFrames: 0,
+      firstBufferedPtsMs: null,
+      lastBufferedPtsMs: null,
+      matchedFrameIndex: null,
+      paused: this.mediaElement?.paused ?? false
+    };
     this.clearCanvas();
+  }
+
+  getDebugInfo(): OverlayDebugInfo {
+    const currentTimeMs = this.getCurrentTimeMs();
+
+    return {
+      ...this.debugInfo,
+      videoCurrentTimeMs: currentTimeMs,
+      paused: this.mediaElement?.paused ?? false,
+      bufferedFrames: this.frames.length,
+      firstBufferedPtsMs: this.frames[0]?.pts ?? null,
+      lastBufferedPtsMs: this.frames[this.frames.length - 1]?.pts ?? null,
+      matchedFrameIndex: this.debugInfo.matchedFrameIndex
+    };
   }
 
   private startRendering(): void {
@@ -225,11 +275,14 @@ export class OverlayRenderer {
 
     this.clearCanvas();
 
+    const currentTimeMs = this.getCurrentTimeMs();
+
     if (this.mediaElement.paused && !this.pausedFrame) {
       this.pausedFrame = this.findClosestFrame(false);
     }
 
     const frame = this.findClosestFrame();
+    this.updateDebugInfo(currentTimeMs, frame);
     if (!frame) return;
 
     const videoRect = this.getDisplayedVideoRect();
@@ -239,6 +292,30 @@ export class OverlayRenderer {
     frame.texts.forEach((textOverlay) => {
       this.renderTextOverlay(textOverlay, videoRect);
     });
+  }
+
+  private updateDebugInfo(currentTimeMs: number | null, frame: MSPData | null): void {
+    const matchedFrameIndex = frame ? this.frames.indexOf(frame) : -1;
+
+    this.debugInfo = {
+      videoCurrentTimeMs: currentTimeMs,
+      seiPtsMs: frame?.pts ?? null,
+      diffMs: currentTimeMs !== null && frame ? currentTimeMs - frame.pts : null,
+      bufferedFrames: this.frames.length,
+      firstBufferedPtsMs: this.frames[0]?.pts ?? null,
+      lastBufferedPtsMs: this.frames[this.frames.length - 1]?.pts ?? null,
+      matchedFrameIndex: matchedFrameIndex >= 0 ? matchedFrameIndex : null,
+      paused: this.mediaElement?.paused ?? false
+    };
+  }
+
+  private getCurrentTimeMs(): number | null {
+    if (!this.mediaElement) {
+      return null;
+    }
+
+    const currentTimeMs = this.mediaElement.currentTime * 1000;
+    return Number.isFinite(currentTimeMs) ? currentTimeMs : null;
   }
 
   private findClosestFrame(allowPausedFrame: boolean = true): MSPData | null {
@@ -574,14 +651,17 @@ export class OverlayRenderer {
 
   private handlePause = (): void => {
     this.pausedFrame = this.findClosestFrame(false);
+    this.updateDebugInfo(this.getCurrentTimeMs(), this.pausedFrame);
   };
 
   private handlePlay = (): void => {
     this.pausedFrame = null;
+    this.updateDebugInfo(this.getCurrentTimeMs(), this.findClosestFrame(false));
   };
 
   private handleSeeking = (): void => {
     this.pausedFrame = null;
+    this.updateDebugInfo(this.getCurrentTimeMs(), this.findClosestFrame(false));
   };
 
   private generateColor(type: string): string {
