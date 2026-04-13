@@ -1,9 +1,13 @@
 import type { MSPData, MSPDetection, MSPTextOverlay } from '../parser/parser';
+import { renderDetection as renderDetectionImpl } from './render-detection';
+import { renderTextOverlay as renderTextOverlayImpl, resolveTextBoxPosition as resolveTextBoxPositionImpl } from './render-text-overlay';
+
+export type LabelField = 'object_id' | 'type' | 'confidence' | 'bbox' | 'angle';
 
 export interface TypeConfig {
   boxColor?: string;
   lineWidth?: number;
-  labelFields?: Array<'object_id' | 'type' | 'confidence' | 'bbox' | 'angle'>;
+  labelFields?: LabelField[];
 }
 
 export interface TextConfig {
@@ -20,7 +24,7 @@ export interface OverlayRendererConfig {
   maxDetectionFrames?: number;
   boxColor?: string | null;
   lineWidth?: number;
-  labelFields?: Array<'object_id' | 'type' | 'confidence' | 'bbox' | 'angle'>;
+  labelFields?: LabelField[];
   typeConfigs?: Record<string, TypeConfig>;
   textConfig?: TextConfig;
 }
@@ -36,7 +40,7 @@ export interface OverlayDebugInfo {
   paused: boolean;
 }
 
-type VideoRect = {
+export type VideoRect = {
   x: number;
   y: number;
   width: number;
@@ -81,7 +85,7 @@ export class OverlayRenderer {
     maxDetectionFrames: number;
     boxColor: string | null;
     lineWidth: number;
-    labelFields: Array<'object_id' | 'type' | 'confidence' | 'bbox' | 'angle'>;
+    labelFields: LabelField[];
     typeConfigs: Record<string, TypeConfig>;
     textConfig: Required<Omit<TextConfig, 'backgroundColor' | 'strokeColor'>> & {
       backgroundColor: string | null;
@@ -384,259 +388,29 @@ export class OverlayRenderer {
 
   private renderDetection(detection: MSPDetection, videoRect: VideoRect): void {
     if (!this.ctx || !this.mediaElement) return;
-
-    const typeConfig = this.config.typeConfigs[detection.type] || {};
-    const boxColor = typeConfig.boxColor ?? this.config.boxColor ?? this.generateColor(detection.type);
-    const lineWidth = typeConfig.lineWidth || this.config.lineWidth;
-    const labelFields = typeConfig.labelFields || this.config.labelFields;
-    const isNormalized = this.isNormalizedBbox(detection);
-
-    let centerX: number;
-    let centerY: number;
-    let width: number;
-    let height: number;
-
-    if (isNormalized) {
-      centerX = videoRect.x + (detection.bbox.cx * videoRect.width);
-      centerY = videoRect.y + (detection.bbox.cy * videoRect.height);
-      width = detection.bbox.width * videoRect.width;
-      height = detection.bbox.height * videoRect.height;
-    } else {
-      const scaleX = this.mediaElement.videoWidth ? (videoRect.width / this.mediaElement.videoWidth) : 0;
-      const scaleY = this.mediaElement.videoHeight ? (videoRect.height / this.mediaElement.videoHeight) : 0;
-      centerX = videoRect.x + (detection.bbox.cx * scaleX);
-      centerY = videoRect.y + (detection.bbox.cy * scaleY);
-      width = detection.bbox.width * scaleX;
-      height = detection.bbox.height * scaleY;
-    }
-
-    const x = centerX - (width / 2);
-    const y = centerY - (height / 2);
-    const angle = this.normalizeAngle(detection.bbox.angle);
-
-    this.ctx.save();
-    this.ctx.translate(centerX, centerY);
-    this.ctx.rotate((angle * Math.PI) / 180);
-    this.ctx.strokeStyle = boxColor;
-    this.ctx.lineWidth = lineWidth;
-    this.ctx.strokeRect(-(width / 2), -(height / 2), width, height);
-    this.ctx.restore();
-
-    if (labelFields.length > 0) {
-      const label = this.buildLabel(detection, labelFields);
-      this.drawLabel(label, x, y, boxColor, videoRect.y);
-    }
+    renderDetectionImpl({
+      ctx: this.ctx,
+      mediaElement: this.mediaElement,
+      detection,
+      videoRect,
+      config: this.config,
+      generateColor: this.generateColor
+    });
   }
 
   private renderTextOverlay(textOverlay: MSPTextOverlay, videoRect: VideoRect): void {
     if (!this.ctx || !this.mediaElement) return;
-
-    const ctx = this.ctx;
-    const mapped = this.mapTextOverlay(textOverlay, videoRect);
-    const config = this.config.textConfig;
-    const padding = config.padding;
-    const horizontalAlign = textOverlay.flags & 0b11;
-    const drawBackground = (textOverlay.flags & 0b100) !== 0;
-    const drawStroke = (textOverlay.flags & 0b1000) !== 0;
-    const anchorType = (textOverlay.flags >> 4) & 0b11;
-    const lines = this.splitTextLines(textOverlay.text);
-    const hasExplicitHeight = mapped.height > 0;
-    const lineCount = Math.max(lines.length, 1);
-    const contentHeight = hasExplicitHeight ? Math.max(0, mapped.height - (padding * 2)) : 0;
-    const lineHeight = contentHeight > 0 ? Math.max(12, contentHeight / lineCount) : Math.max(config.fontSize * 1.2, config.fontSize);
-    const fontSize = contentHeight > 0 ? Math.max(12, lineHeight / 1.2) : config.fontSize;
-
-    ctx.save();
-    ctx.font = `${fontSize}px ${config.fontFamily}`;
-    ctx.textBaseline = 'top';
-
-    const measuredWidth = this.measureMaxLineWidth(lines);
-    const boxWidth = mapped.width > 0 ? mapped.width : measuredWidth + (padding * 2);
-    const boxHeight = mapped.height > 0 ? mapped.height : (lineCount * lineHeight) + (padding * 2);
-    const boxPosition = this.resolveTextBoxPosition(anchorType, mapped.x, mapped.y, boxWidth, boxHeight);
-    const fillColor = this.colorFromRGBA(textOverlay.text_color, config.textColor);
-    const backgroundColor = this.colorFromRGBA(textOverlay.bg_color, config.backgroundColor);
-    const strokeColor = config.strokeColor || fillColor;
-
-    ctx.textAlign = this.getCanvasTextAlign(horizontalAlign);
-
-    if (drawBackground && backgroundColor) {
-      ctx.fillStyle = backgroundColor;
-      ctx.fillRect(boxPosition.x, boxPosition.y, boxWidth, boxHeight);
-    }
-
-    const textX = this.resolveTextX(horizontalAlign, boxPosition.x, boxWidth, padding);
-    const textY = boxPosition.y + padding;
-    const maxWidth = Math.max(0, boxWidth - (padding * 2));
-
-    ctx.fillStyle = fillColor;
-
-    lines.forEach((line, index) => {
-      const lineY = textY + (index * lineHeight);
-
-      if (drawStroke && strokeColor) {
-        ctx.strokeStyle = strokeColor;
-        ctx.lineWidth = config.lineWidth;
-        ctx.strokeText(line, textX, lineY, maxWidth || undefined);
-      }
-
-      ctx.fillText(line, textX, lineY, maxWidth || undefined);
+    renderTextOverlayImpl({
+      ctx: this.ctx,
+      mediaElement: this.mediaElement,
+      textOverlay,
+      videoRect,
+      textConfig: this.config.textConfig
     });
-
-    ctx.restore();
-  }
-
-  private splitTextLines(text: string): string[] {
-    return text.split(/\r?\n/);
-  }
-
-  private measureMaxLineWidth(lines: string[]): number {
-    if (!this.ctx || lines.length === 0) {
-      return 0;
-    }
-
-    return lines.reduce((maxWidth, line) => Math.max(maxWidth, this.ctx!.measureText(line).width), 0);
-  }
-
-  private buildLabel(detection: MSPDetection, fields: Array<'object_id' | 'type' | 'confidence' | 'bbox' | 'angle'>): string {
-    const parts: string[] = [];
-
-    fields.forEach((field) => {
-      switch (field) {
-        case 'object_id':
-          parts.push(`ID:${detection.object_id}`);
-          break;
-        case 'type':
-          parts.push(detection.type);
-          break;
-        case 'confidence':
-          parts.push(`${detection.confidence.toFixed(2)}`);
-          break;
-        case 'bbox': {
-          const bbox = detection.bbox;
-          const isNormalized = this.isNormalizedBbox(detection);
-          if (isNormalized) {
-            parts.push(
-              `${(bbox.cx * 100).toFixed(1)},${(bbox.cy * 100).toFixed(1)},${(bbox.width * 100).toFixed(1)},${(bbox.height * 100).toFixed(1)}%`
-            );
-          } else {
-            parts.push(`${Math.round(bbox.cx)},${Math.round(bbox.cy)},${Math.round(bbox.width)},${Math.round(bbox.height)}`);
-          }
-          break;
-        }
-        case 'angle':
-          parts.push(`${this.normalizeAngle(detection.bbox.angle).toFixed(1)}deg`);
-          break;
-      }
-    });
-
-    return parts.join(' ');
-  }
-
-  private drawLabel(text: string, x: number, y: number, color: string, minTop: number): void {
-    if (!this.ctx) return;
-
-    const padding = 4;
-    const fontSize = 12;
-
-    this.ctx.font = `${fontSize}px Arial`;
-    this.ctx.textBaseline = 'top';
-
-    const textWidth = this.ctx.measureText(text).width;
-    const textHeight = fontSize;
-    const labelY = Math.max(minTop, y - textHeight - (padding * 2));
-
-    this.ctx.fillStyle = color;
-    this.ctx.fillRect(x, labelY, textWidth + (padding * 2), textHeight + (padding * 2));
-
-    this.ctx.fillStyle = '#ffffff';
-    this.ctx.fillText(text, x + padding, labelY + padding);
-  }
-
-  private isNormalizedBbox(detection: MSPDetection): boolean {
-    const { cx, cy, width, height } = detection.bbox;
-    return cx <= 1 && cy <= 1 && width <= 1 && height <= 1;
-  }
-
-  private mapTextOverlay(textOverlay: MSPTextOverlay, videoRect: VideoRect): VideoRect {
-    if (!this.mediaElement) {
-      return { x: 0, y: 0, width: 0, height: 0 };
-    }
-
-    const isNormalized = textOverlay.x <= 1 && textOverlay.y <= 1 && textOverlay.width <= 1 && textOverlay.height <= 1;
-    if (isNormalized) {
-      return {
-        x: videoRect.x + (textOverlay.x * videoRect.width),
-        y: videoRect.y + (textOverlay.y * videoRect.height),
-        width: textOverlay.width * videoRect.width,
-        height: textOverlay.height * videoRect.height
-      };
-    }
-
-    const scaleX = this.mediaElement.videoWidth ? (videoRect.width / this.mediaElement.videoWidth) : 0;
-    const scaleY = this.mediaElement.videoHeight ? (videoRect.height / this.mediaElement.videoHeight) : 0;
-
-    return {
-      x: videoRect.x + (textOverlay.x * scaleX),
-      y: videoRect.y + (textOverlay.y * scaleY),
-      width: textOverlay.width * scaleX,
-      height: textOverlay.height * scaleY
-    };
   }
 
   private resolveTextBoxPosition(anchorType: number, x: number, y: number, width: number, height: number): { x: number; y: number } {
-    switch (anchorType) {
-      case 1:
-        return { x: x - width, y };
-      case 2:
-        return { x, y: y - height };
-      case 3:
-        return { x: x - width, y: y - height };
-      default:
-        return { x, y };
-    }
-  }
-
-  private resolveTextX(horizontalAlign: number, x: number, width: number, padding: number): number {
-    switch (horizontalAlign) {
-      case 1:
-        return x + (width / 2);
-      case 2:
-        return x + width - padding;
-      default:
-        return x + padding;
-    }
-  }
-
-  private getCanvasTextAlign(horizontalAlign: number): CanvasTextAlign {
-    switch (horizontalAlign) {
-      case 1:
-        return 'center';
-      case 2:
-        return 'right';
-      default:
-        return 'left';
-    }
-  }
-
-  private colorFromRGBA(value: number, fallback: string | null): string {
-    const normalized = value >>> 0;
-
-    if (normalized === 0 && fallback) {
-      return fallback;
-    }
-
-    const red = (normalized >>> 24) & 0xFF;
-    const green = (normalized >>> 16) & 0xFF;
-    const blue = (normalized >>> 8) & 0xFF;
-    const alpha = (normalized & 0xFF) / 255;
-
-    return `rgba(${red}, ${green}, ${blue}, ${alpha.toFixed(3)})`;
-  }
-
-  private normalizeAngle(angle: number): number {
-    const normalized = angle % 360;
-    return normalized < 0 ? normalized + 360 : normalized;
+    return resolveTextBoxPositionImpl(anchorType, x, y, width, height);
   }
 
   private getDisplayedVideoRect(): VideoRect {
