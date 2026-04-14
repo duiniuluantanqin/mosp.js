@@ -64,10 +64,6 @@ export class MSPParser {
   private readonly decoder = new TextDecoder();
 
   parse(data: any): MSPData | null {
-    if (data && typeof data === 'object' && 'pts' in data && ('detections' in data || 'texts' in data)) {
-      return this.normalizeFrameData(data);
-    }
-
     if (data && typeof data === 'object' && 'uuid' in data && 'user_data' in data) {
       return this.parseFromSEIData(data as SEIData);
     }
@@ -95,25 +91,6 @@ export class MSPParser {
       console.error('MSP parsing error:', error);
       return null;
     }
-  }
-
-  private normalizeFrameData(data: any): MSPData | null {
-    const detections = Array.isArray(data.detections)
-      ? data.detections.map((detection: any) => this.normalizeDetection(detection)).filter(Boolean) as MSPDetection[]
-      : [];
-    const texts = Array.isArray(data.texts)
-      ? data.texts.map((text: any) => this.normalizeTextOverlay(text)).filter(Boolean) as MSPTextOverlay[]
-      : [];
-
-    if (detections.length === 0 && texts.length === 0) {
-      return null;
-    }
-
-    return {
-      pts: typeof data.pts === 'number' ? data.pts : 0,
-      detections,
-      texts
-    };
   }
 
   private parseMSP_V1(payload: Uint8Array): Omit<MSPData, 'pts'> | null {
@@ -243,65 +220,6 @@ export class MSPParser {
       bg_color: readUint32BE(payload, offset + 16),
       text: this.decoder.decode(payload.slice(textStart, textEnd))
     };
-  }
-
-  private normalizeDetection(detection: any): MSPDetection | null {
-    if (!detection || typeof detection !== 'object') {
-      return null;
-    }
-
-    const bbox = detection.bbox || {};
-    const cx = this.readNumber(bbox.cx ?? bbox.x);
-    const cy = this.readNumber(bbox.cy ?? bbox.y);
-    const width = this.readNumber(bbox.width ?? bbox.w);
-    const height = this.readNumber(bbox.height ?? bbox.h);
-
-    if (cx === null || cy === null || width === null || height === null) {
-      return null;
-    }
-
-    return {
-      object_id: this.readNumber(detection.object_id ?? detection.id) ?? 0,
-      type: typeof detection.type === 'string' ? detection.type : String(detection.type ?? ''),
-      confidence: this.readNumber(detection.confidence) ?? 0,
-      bbox: {
-        cx,
-        cy,
-        width,
-        height,
-        angle: this.readNumber(bbox.angle) ?? 0
-      },
-      distance: this.readNumber(detection.distance) ?? 0
-    };
-  }
-
-  private normalizeTextOverlay(text: any): MSPTextOverlay | null {
-    if (!text || typeof text !== 'object' || typeof text.text !== 'string') {
-      return null;
-    }
-
-    const x = this.readNumber(text.x);
-    const y = this.readNumber(text.y);
-
-    if (x === null || y === null) {
-      return null;
-    }
-
-    return {
-      text: text.text,
-      flags: this.readNumber(text.flags) ?? 0,
-      style: this.readNumber(text.style) ?? 0,
-      x,
-      y,
-      width: this.readNumber(text.width ?? text.w) ?? 0,
-      height: this.readNumber(text.height ?? text.h) ?? 0,
-      text_color: this.readNumber(text.text_color ?? text.textColor) ?? 0xFFFFFFFF,
-      bg_color: this.readNumber(text.bg_color ?? text.bgColor) ?? 0x00000000
-    };
-  }
-
-  private readNumber(value: unknown): number | null {
-    return typeof value === 'number' && Number.isFinite(value) ? value : null;
   }
 
   private quantizedWordToDegrees(value: number): number {
