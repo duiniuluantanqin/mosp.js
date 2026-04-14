@@ -76,7 +76,7 @@ MSP 使用如下 UUID：
 
 4.4 MSP V1 负载定义
 
-MSP V1 负载使用如下 C 风格结构定义：
+MSP V1 负载使用如下 C 风格结构定义
 
 typedef struct {
     uint8_t  version;        // 版本号，固定为 1
@@ -87,9 +87,10 @@ typedef struct {
 } msp;
 
 typedef struct {
-    uint8_t  item_type;      // 绘制项类型
-    uint8_t  item_size;      // 当前绘制项 payload 字节数，不含 item_type 和 item_size 自身
-    uint8_t  item_payload[1];// 变长载荷
+    uint8_t  item_id;         // 绘制项标识，用于持续渲染期间的覆盖匹配
+    uint8_t  item_type;       // 绘制项类型
+    uint16_t item_duration;   // 持续渲染时长，单位 ms
+    uint8_t  item_payload[1]; // 变长载荷
 } msp_item;
 
 说明：
@@ -97,7 +98,6 @@ typedef struct {
 1. items[1] 仅表示变长区域起点，实际内容由 item_count 决定。
 2. 当 item_count 为 0 时，负载中不包含任何绘制项。
 3. 文中 payload 头部固定长度按 4 字节计算，不包含任何绘制项数据。
-4. 每个 msp_item 的总长度为 2 + item_size 字节。
 
 4.4.1 字节序
 
@@ -116,14 +116,6 @@ payload 的固定头部布局如下：
  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
  |                  items[0] ...（若存在）                      |
  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-
-字段说明：
-
-1. version（uint8_t，1 字节）
-2. reserved1（uint8_t，1 字节）
-3. reserved2（uint8_t，1 字节）
-4. item_count（uint8_t，1 字节）
-5. items（item_count 个绘制项，逐项顺序编码）
 
 语义说明：
 
@@ -150,21 +142,31 @@ item_count
   0                   1                   2                   3
   0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
- |   item_type   |   item_size   |         item_payload...       |
+ |   item_id     |   item_type   |        item_duration          |
+ +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ |                       item_payload...                        |
  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 
-字段说明：
+item_id
+绘制项标识，用于在协议层明确“哪一个新绘制项应覆盖哪一个旧绘制项”。接收端必须仅使用 item_id 作为同一逻辑绘制项的匹配键，而不是依赖内容比对、item_type 组合或业务推断。
 
-1. item_type（uint8_t）
-2. item_size（uint8_t）
-3. item_payload（item_size 字节）
+item_type 
+取值定义如下：
 
-item_type 取值定义如下：
+ 1：检测框项（bbox item）
+ 2：OSD 文字项（text osd item）
 
-1. 1：检测框项（bbox item）
-2. 2：OSD 文字项（text osd item）
+item_duration
+持续渲染时长，单位为 ms，占 2 字节。
 
-接收端遇到未知 item_type 时，应依据 item_size 跳过该项，而不是直接按错误结构解析后续数据。
+语义如下：
+
+1. item_duration 表示该绘制项从当前 SEI 所属帧开始还应继续显示多久；取值范围为 0 到 65535 ms。
+2. 当 item_duration=0 时，该绘制项仅在当前帧生效。
+3. 当 item_duration=N 且 N 大于 0 时，该绘制项应继续显示 N ms；若在这段时间内未收到相同 item_id 的新绘制项，则显示到期后结束。
+4. 如果在有效期内收到新的、且 item_id 相同的绘制项，则新绘制项立即覆盖旧绘制项，并按新的 item_duration 重新计时。
+
+例如，时间 OSD 水印若每 1 秒仅发送 1 次，则发送端可将该绘制项的 item_duration 置为 1000，并将 item_id 固定为某个约定值（例如 1），表示自当前帧开始的后续 1000 ms 内即使未再次收到 item_id=1 的新绘制项，也应保持显示；但如果在 800 ms 时提前收到新的时间 OSD，且其 item_id 仍为 1，则应立即切换为新的时间内容，而不是继续显示旧值直到 1000 ms 结束。
 
 4.4.4 检测框项格式
 
@@ -182,24 +184,6 @@ typedef struct {
     uint32_t distance;   // 距离（mm）
     uint8_t  type[type_length]; // 目标类别字符串，UTF-8
 } msp_bbox_item_data;
-
-说明：
-
-1. 当 item_type=1 时，item_size 必须等于 18 + type_length。
-2. item_payload 按上表结构解释。
-
-字段说明：
-
-1. id（uint16_t）
-2. type_length（uint8_t）
-3. confidence（uint8_t）
-4. cx（uint16_t）
-5. cy（uint16_t）
-6. w（uint16_t）
-7. h（uint16_t）
-8. angle（uint16_t）
-9. distance（uint32_t）
-10. type（UTF-8 字符串）
 
 语义说明：
 
@@ -335,16 +319,16 @@ angle = angle_q / 65535.0 * 360.0
 设 N = item_count，第 i 个绘制项的 payload 长度为 Li。
 
 MSP 负载长度：
-4 + Σ(2 + Li) 字节，其中 i ∈ [0, N-1]
+4 + Σ(4 + Li) 字节，其中 i ∈ [0, N-1]
 
 完整 SEI user_data_unregistered 负载长度：
-16 + 4 + Σ(2 + Li) 字节，其中 i ∈ [0, N-1]
+16 + 4 + Σ(4 + Li) 字节，其中 i ∈ [0, N-1]
 
 其中：
 
 1. 16 字节为 UUID
 2. 4 字节为 MSP 固定头部
-3. 每个绘制项由 2 字节通用头和 Li 字节 item_payload 构成
+3. 每个绘制项由 4 字节通用头和 Li 字节 item_payload 构成
 
 4.4.8 解析要求
 
@@ -352,18 +336,20 @@ MSP 负载长度：
 
 1. 负载长度不得小于 4 字节。
 2. version 当前必须为 1。
-3. items 区域中每个绘制项都必须满足剩余长度不少于 2 字节。
-4. 每个绘制项都必须满足剩余长度不少于 2 + item_size 字节。
-5. 当 item_type=1 时，item_size 必须大于等于 18，且必须满足 item_size = 18 + type_length。
-6. 当 item_type=2 时，item_size 必须大于等于 20，且必须满足 item_size = 20 + text_length。
-7. 多字节字段需按大端序解析。
-8. 遇到未知 item_type 时，应依据 item_size 安全跳过。
+3. items 区域中每个绘制项都必须满足剩余长度不少于 4 字节。
+5. item_duration 为无符号 16 位时长字段，单位为 ms；其中 0 表示仅当前帧生效。
+6. item_id 是绘制项覆盖匹配的唯一键；发送端应保证同一时刻需要并存显示的绘制项使用不同的 item_id。
+9. 多字节字段需按大端序解析。
 
 5. 同步语义
 
 每条 MSP 消息与承载该 SEI 的视频帧关联。
 
 由于 MSP 采用带内传输，元数据与视频在同一基本流中传递，因此协议不单独定义 timestamp 字段。协议默认认为 SEI 所属帧即为当前元数据对应帧。
+
+若某个绘制项的 item_duration 大于 0，则该绘制项除当前帧外，还应继续作用于自该帧显示时刻起的后续 item_duration ms 时间窗口。该机制用于降低重复发送频率，例如低频更新的时间水印、标题栏或状态标签。
+
+若在上述持续显示期间收到新的、且 item_id 相同的绘制项，则接收端应立即以新绘制项替换旧绘制项，并按新绘制项所属帧的显示时刻重新开始计时。
 
 如果系统还具备额外的视频时间戳信息，可由上层业务自行使用，但这不属于 MSP 负载本身的一部分。
 
