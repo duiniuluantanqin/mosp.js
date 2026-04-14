@@ -36,7 +36,11 @@ function uint32Bytes(value: number): number[] {
   ];
 }
 
-function createBBoxItem(input: {
+/**
+ * Creates a bbox item payload (item_payload only, without the 4-byte common header).
+ * Common header: item_id(1) + item_type(1) + item_duration(2)
+ */
+function createBBoxItemPayload(input: {
   id: number;
   type: string;
   confidence: number;
@@ -48,11 +52,8 @@ function createBBoxItem(input: {
   distance: number;
 }): Uint8Array {
   const typeBytes = encoder.encode(input.type);
-  const itemSize = 18 + typeBytes.length;
 
   return new Uint8Array([
-    0x01,
-    itemSize,
     ...uint16Bytes(input.id),
     typeBytes.length,
     encodeConfidence(input.confidence),
@@ -66,7 +67,10 @@ function createBBoxItem(input: {
   ]);
 }
 
-function createTextItem(input: {
+/**
+ * Creates a text item payload (item_payload only, without the 4-byte common header).
+ */
+function createTextItemPayload(input: {
   text: string;
   flags: number;
   style: number;
@@ -78,11 +82,8 @@ function createTextItem(input: {
   backgroundColor: number;
 }): Uint8Array {
   const textBytes = encoder.encode(input.text);
-  const itemSize = 20 + textBytes.length;
 
   return new Uint8Array([
-    0x02,
-    itemSize,
     input.flags,
     input.style,
     ...uint16Bytes(encodeUnit(input.x)),
@@ -90,21 +91,69 @@ function createTextItem(input: {
     ...uint16Bytes(encodeUnit(input.width)),
     ...uint16Bytes(encodeUnit(input.height)),
     textBytes.length,
-    0x00,
+    0x00, // reserved
     ...uint32Bytes(input.textColor),
     ...uint32Bytes(input.backgroundColor),
     ...textBytes
   ]);
 }
 
+/**
+ * Wraps an item payload with the 4-byte common header:
+ * item_id(1) + item_type(1) + item_duration(2)
+ */
+function wrapItem(itemId: number, itemType: number, itemDuration: number, payload: Uint8Array): Uint8Array {
+  const result = new Uint8Array(4 + payload.byteLength);
+  result[0] = itemId;
+  result[1] = itemType;
+  result[2] = (itemDuration >> 8) & 0xFF;
+  result[3] = itemDuration & 0xFF;
+  result.set(payload, 4);
+  return result;
+}
+
+function createBBoxItem(input: {
+  itemId?: number;
+  itemDuration?: number;
+  id: number;
+  type: string;
+  confidence: number;
+  cx: number;
+  cy: number;
+  width: number;
+  height: number;
+  angle: number;
+  distance: number;
+}): Uint8Array {
+  const payload = createBBoxItemPayload(input);
+  return wrapItem(input.itemId ?? 0, 0x01, input.itemDuration ?? 0, payload);
+}
+
+function createTextItem(input: {
+  itemId?: number;
+  itemDuration?: number;
+  text: string;
+  flags: number;
+  style: number;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  textColor: number;
+  backgroundColor: number;
+}): Uint8Array {
+  const payload = createTextItemPayload(input);
+  return wrapItem(input.itemId ?? 0, 0x02, input.itemDuration ?? 0, payload);
+}
+
 function createPayload(items: Uint8Array[]): Uint8Array {
   const totalLength = 4 + items.reduce((length, item) => length + item.byteLength, 0);
   const payload = new Uint8Array(totalLength);
 
-  payload[0] = 0x01;
-  payload[1] = 0x00;
-  payload[2] = 0x00;
-  payload[3] = items.length;
+  payload[0] = 0x01; // version
+  payload[1] = 0x00; // reserved1
+  payload[2] = 0x00; // reserved2
+  payload[3] = items.length; // item_count
 
   let offset = 4;
   items.forEach((item) => {
@@ -132,37 +181,6 @@ describe('MSPParser', () => {
     expect(parser).toBeDefined();
   });
 
-  it('should parse already formatted data', () => {
-    const mockData = {
-      pts: 1.5,
-      detections: [
-        {
-          object_id: 1,
-          type: 'person',
-          confidence: 0.95,
-          bbox: { cx: 0.1, cy: 0.1, width: 0.2, height: 0.15, angle: 15 },
-          distance: 2500
-        }
-      ],
-      texts: [
-        {
-          text: 'OSD',
-          flags: 0,
-          style: 1,
-          x: 0.2,
-          y: 0.2,
-          width: 0.1,
-          height: 0.05,
-          text_color: 0xFFFFFFFF,
-          bg_color: 0x00000099
-        }
-      ]
-    };
-
-    const result = parser.parse(mockData);
-    expect(result).toEqual(mockData);
-  });
-
   it('should return null for invalid data', () => {
     expect(parser.parse(null)).toBeNull();
     expect(parser.parse(undefined)).toBeNull();
@@ -173,6 +191,8 @@ describe('MSPParser', () => {
   it('should parse SEIData with a rotated bbox item and text item', () => {
     const userData = createPayload([
       createBBoxItem({
+        itemId: 1,
+        itemDuration: 0,
         id: 256,
         type: 'person',
         confidence: 240 / 255,
@@ -184,6 +204,8 @@ describe('MSPParser', () => {
         distance: 1000000
       }),
       createTextItem({
+        itemId: 2,
+        itemDuration: 0,
         text: 'helmet',
         flags: 0b00000100,
         style: 2,
@@ -212,6 +234,8 @@ describe('MSPParser', () => {
     expect(result?.texts).toHaveLength(1);
 
     const detection = result?.detections[0];
+    expect(detection?.item_id).toBe(1);
+    expect(detection?.item_duration).toBe(0);
     expect(detection?.type).toBe('person');
     expect(detection?.confidence).toBeCloseTo(0.941, 2);
     expect(detection?.bbox.cx).toBeCloseTo(0.25, 2);
@@ -221,6 +245,8 @@ describe('MSPParser', () => {
     expect(detection?.bbox.angle).toBeCloseTo(30, 0);
 
     const text = result?.texts[0];
+    expect(text?.item_id).toBe(2);
+    expect(text?.item_duration).toBe(0);
     expect(text?.text).toBe('helmet');
     expect(text?.x).toBeCloseTo(0.2, 2);
     expect(text?.width).toBeCloseTo(0.18, 2);
@@ -229,6 +255,7 @@ describe('MSPParser', () => {
   it('should parse multiple detections', () => {
     const userData = createPayload([
       createBBoxItem({
+        itemId: 1,
         id: 256,
         type: 'person',
         confidence: 224 / 255,
@@ -240,6 +267,7 @@ describe('MSPParser', () => {
         distance: 500000
       }),
       createBBoxItem({
+        itemId: 2,
         id: 512,
         type: 'vehicle',
         confidence: 192 / 255,
@@ -264,6 +292,37 @@ describe('MSPParser', () => {
     expect(result?.detections).toHaveLength(2);
     expect(result?.detections[0].type).toBe('person');
     expect(result?.detections[1].type).toBe('vehicle');
+  });
+
+  it('should parse item_duration correctly', () => {
+    const userData = createPayload([
+      createTextItem({
+        itemId: 5,
+        itemDuration: 1000,
+        text: '12:34:56',
+        flags: 0,
+        style: 0,
+        x: 0.0,
+        y: 0.0,
+        width: 0.2,
+        height: 0.05,
+        textColor: 0xFFFFFFFF,
+        backgroundColor: 0x00000099
+      })
+    ]);
+
+    const seiData = {
+      type: 5,
+      size: uuid.byteLength + userData.byteLength,
+      uuid,
+      user_data: userData,
+      pts: 5000
+    };
+
+    const result = parser.parse(seiData);
+    expect(result?.texts[0].item_id).toBe(5);
+    expect(result?.texts[0].item_duration).toBe(1000);
+    expect(result?.texts[0].text).toBe('12:34:56');
   });
 
   it('should return null for wrong UUID', () => {
@@ -312,25 +371,9 @@ describe('MSPParser', () => {
     expect(result).toBeNull();
   });
 
-  it('should return null for invalid bbox item size', () => {
-    const userData = new Uint8Array([
-      0x01,
-      0x00,
-      0x00,
-      0x01,
-      0x01,
-      0x12,
-      ...uint16Bytes(1),
-      0x04,
-      encodeConfidence(0.9),
-      ...uint16Bytes(encodeUnit(0.5)),
-      ...uint16Bytes(encodeUnit(0.5)),
-      ...uint16Bytes(encodeUnit(0.2)),
-      ...uint16Bytes(encodeUnit(0.2)),
-      ...uint16Bytes(encodeAngle(30)),
-      ...uint32Bytes(1000),
-      ...encoder.encode('bad')
-    ]);
+  it('should return null for truncated item header', () => {
+    // Payload claims 1 item but only has 3 bytes after the header (need 4 for item header)
+    const userData = new Uint8Array([0x01, 0x00, 0x00, 0x01, 0x01, 0x01, 0x00]);
 
     const result = parser.parse({
       type: 5,

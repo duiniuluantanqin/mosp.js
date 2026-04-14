@@ -15,6 +15,8 @@ export interface MSPBoundingBox {
 }
 
 export interface MSPDetection {
+  item_id: number;
+  item_duration: number; // ms
   object_id: number;
   type: string;
   confidence: number;
@@ -23,6 +25,8 @@ export interface MSPDetection {
 }
 
 export interface MSPTextOverlay {
+  item_id: number;
+  item_duration: number; // ms
   text: string;
   flags: number;
   style: number;
@@ -55,6 +59,7 @@ const MSP_UUID_V1 = new Uint8Array([
 ]);
 
 const MSP_HEADER_SIZE_V1 = 4;
+const MSP_ITEM_HEADER_SIZE = 4; // item_id(1) + item_type(1) + item_duration(2)
 const MSP_BBOX_ITEM_TYPE = 1;
 const MSP_TEXT_ITEM_TYPE = 2;
 const MSP_BBOX_FIXED_SIZE = 18;
@@ -111,34 +116,41 @@ export class MSPParser {
     let offset = MSP_HEADER_SIZE_V1;
 
     for (let i = 0; i < itemCount; i++) {
-      if (offset + 2 > payload.byteLength) {
+      if (offset + MSP_ITEM_HEADER_SIZE > payload.byteLength) {
         return null;
       }
 
-      const itemType = payload[offset];
-      const itemSize = payload[offset + 1];
-      const itemOffset = offset + 2;
-      const itemEnd = itemOffset + itemSize;
-
-      if (itemEnd > payload.byteLength) {
-        return null;
-      }
+      const itemId = payload[offset];
+      const itemType = payload[offset + 1];
+      const itemDuration = readUint16BE(payload, offset + 2);
+      const itemPayloadOffset = offset + MSP_ITEM_HEADER_SIZE;
 
       if (itemType === MSP_BBOX_ITEM_TYPE) {
-        const detection = this.parseBBoxItem(payload, itemOffset, itemSize);
+        if (itemPayloadOffset + 3 > payload.byteLength) {
+          return null;
+        }
+        const typeLength = payload[itemPayloadOffset + 2]; // UTF-8 byte length
+        const detection = this.parseBBoxItem(payload, itemPayloadOffset, itemId, itemDuration);
         if (!detection) {
           return null;
         }
         detections.push(detection);
+        offset = itemPayloadOffset + MSP_BBOX_FIXED_SIZE + typeLength;
       } else if (itemType === MSP_TEXT_ITEM_TYPE) {
-        const text = this.parseTextItem(payload, itemOffset, itemSize);
+        if (itemPayloadOffset + 11 > payload.byteLength) {
+          return null;
+        }
+        const textLength = payload[itemPayloadOffset + 10]; // UTF-8 byte length
+        const text = this.parseTextItem(payload, itemPayloadOffset, itemId, itemDuration);
         if (!text) {
           return null;
         }
         texts.push(text);
+        offset = itemPayloadOffset + MSP_TEXT_FIXED_SIZE + textLength;
+      } else {
+        // Unknown item type — cannot determine payload length, abort
+        return null;
       }
-
-      offset = itemEnd;
     }
 
     if (offset !== payload.byteLength) {
@@ -152,18 +164,15 @@ export class MSPParser {
     return { detections, texts };
   }
 
-  private parseBBoxItem(payload: Uint8Array, offset: number, itemSize: number): MSPDetection | null {
-    if (itemSize < MSP_BBOX_FIXED_SIZE) {
+  private parseBBoxItem(payload: Uint8Array, offset: number, itemId: number, itemDuration: number): MSPDetection | null {
+    if (offset + MSP_BBOX_FIXED_SIZE > payload.byteLength) {
       return null;
     }
 
     const typeLength = payload[offset + 2];
-    if (itemSize !== MSP_BBOX_FIXED_SIZE + typeLength) {
-      return null;
-    }
-
     const typeStart = offset + MSP_BBOX_FIXED_SIZE;
     const typeEnd = typeStart + typeLength;
+
     if (typeEnd > payload.byteLength) {
       return null;
     }
@@ -179,6 +188,8 @@ export class MSPParser {
     const type = this.decoder.decode(payload.slice(typeStart, typeEnd));
 
     return {
+      item_id: itemId,
+      item_duration: itemDuration,
       object_id: objectID,
       type,
       confidence: quantizedByteToUnit(confidenceQ),
@@ -193,23 +204,22 @@ export class MSPParser {
     };
   }
 
-  private parseTextItem(payload: Uint8Array, offset: number, itemSize: number): MSPTextOverlay | null {
-    if (itemSize < MSP_TEXT_FIXED_SIZE) {
+  private parseTextItem(payload: Uint8Array, offset: number, itemId: number, itemDuration: number): MSPTextOverlay | null {
+    if (offset + MSP_TEXT_FIXED_SIZE > payload.byteLength) {
       return null;
     }
 
     const textLength = payload[offset + 10];
-    if (itemSize !== MSP_TEXT_FIXED_SIZE + textLength) {
-      return null;
-    }
-
     const textStart = offset + MSP_TEXT_FIXED_SIZE;
     const textEnd = textStart + textLength;
+
     if (textEnd > payload.byteLength) {
       return null;
     }
 
     return {
+      item_id: itemId,
+      item_duration: itemDuration,
       flags: payload[offset],
       style: payload[offset + 1],
       x: quantizedWordToUnit(readUint16BE(payload, offset + 2)),

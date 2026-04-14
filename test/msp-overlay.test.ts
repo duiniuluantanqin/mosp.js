@@ -241,6 +241,8 @@ describe('MSPOverlay', () => {
       pts: 0,
       detections: [
         {
+          item_id: 1,
+          item_duration: 0,
           object_id: 1,
           type: 'person',
           confidence: 0.95,
@@ -250,6 +252,8 @@ describe('MSPOverlay', () => {
       ],
       texts: [
         {
+          item_id: 2,
+          item_duration: 0,
           text: 'OSD',
           x: 0.2,
           y: 0.2,
@@ -273,6 +277,8 @@ describe('MSPOverlay', () => {
       pts: 0,
       detections: [
         {
+          item_id: 1,
+          item_duration: 0,
           object_id: 2,
           type: 'vehicle',
           confidence: 0.95,
@@ -282,6 +288,8 @@ describe('MSPOverlay', () => {
       ],
       texts: [
         {
+          item_id: 2,
+          item_duration: 0,
           text: 'pixel osd',
           x: 100,
           y: 80,
@@ -351,6 +359,8 @@ describe('MSPOverlay', () => {
     const renderer = (overlay as any).renderer;
 
     renderer.renderTextOverlay({
+      item_id: 1,
+      item_duration: 0,
       text: 'line1\nline2',
       x: 20,
       y: 30,

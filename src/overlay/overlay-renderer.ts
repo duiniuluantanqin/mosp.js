@@ -47,6 +47,16 @@ export type VideoRect = {
   height: number;
 };
 
+/**
+ * Tracks a single active drawing item (detection or text overlay) with its
+ * expiry time derived from item_duration.
+ */
+interface ActiveItem<T> {
+  item: T;
+  /** Absolute time (ms, same epoch as pts) when this item expires. */
+  expiresAt: number;
+}
+
 export class OverlayRenderer {
   private static readonly DEFAULT_TYPE_COLORS = [
     '#ff4d4f',
@@ -70,6 +80,12 @@ export class OverlayRenderer {
   private animationFrameId: number | null = null;
   private pausedFrame: MSPData | null = null;
   private assignedTypeColors = new Map<string, string>();
+
+  /** Active detections keyed by item_id, supporting item_duration persistence. */
+  private activeDetections = new Map<number, ActiveItem<MSPDetection>>();
+  /** Active text overlays keyed by item_id, supporting item_duration persistence. */
+  private activeTexts = new Map<number, ActiveItem<MSPTextOverlay>>();
+
   private debugInfo: OverlayDebugInfo = {
     videoCurrentTimeMs: null,
     seiPtsMs: null,
@@ -258,6 +274,8 @@ export class OverlayRenderer {
   clear(): void {
     this.frames = [];
     this.pausedFrame = null;
+    this.activeDetections.clear();
+    this.activeTexts.clear();
     this.assignedTypeColors.clear();
     this.debugInfo = {
       videoCurrentTimeMs: this.getCurrentTimeMs(),
@@ -310,15 +328,92 @@ export class OverlayRenderer {
 
     const frame = this.findClosestFrame();
     this.updateDebugInfo(currentTimeMs, frame);
-    if (!frame) return;
+
+    // Apply items from the matched frame into the active item maps
+    if (frame) {
+      this.applyFrameItems(frame);
+    }
+
+    // Collect currently visible items (not expired) for rendering
+    const renderTimeMs = currentTimeMs ?? 0;
+    const visibleDetections = this.collectActiveDetections(renderTimeMs);
+    const visibleTexts = this.collectActiveTexts(renderTimeMs);
+
+    if (visibleDetections.length === 0 && visibleTexts.length === 0) return;
 
     const videoRect = this.getDisplayedVideoRect();
-    frame.detections.forEach((detection) => {
+    visibleDetections.forEach((detection) => {
       this.renderDetection(detection, videoRect);
     });
-    frame.texts.forEach((textOverlay) => {
+    visibleTexts.forEach((textOverlay) => {
       this.renderTextOverlay(textOverlay, videoRect);
     });
+  }
+
+  /**
+   * Applies items from a matched frame into the active item maps.
+   * Each item's expiry is computed as pts + item_duration.
+   * If item_duration === 0, the item expires immediately after the current frame
+   * (we set expiresAt = pts so it only renders when currentTime ≈ pts).
+   */
+  private applyFrameItems(frame: MSPData): void {
+    for (const detection of frame.detections) {
+      const expiresAt = detection.item_duration > 0
+        ? frame.pts + detection.item_duration
+        : frame.pts;
+      this.activeDetections.set(detection.item_id, { item: detection, expiresAt });
+    }
+
+    for (const text of frame.texts) {
+      const expiresAt = text.item_duration > 0
+        ? frame.pts + text.item_duration
+        : frame.pts;
+      this.activeTexts.set(text.item_id, { item: text, expiresAt });
+    }
+  }
+
+  /**
+   * Returns detections that are still within their display window at renderTimeMs.
+   * Items with item_duration === 0 are only shown when renderTimeMs is within
+   * a ±50 ms window of their frame pts.
+   */
+  private collectActiveDetections(renderTimeMs: number): MSPDetection[] {
+    const result: MSPDetection[] = [];
+    for (const [, active] of this.activeDetections) {
+      const pts = active.item.item_duration === 0
+        ? active.expiresAt
+        : active.expiresAt - active.item.item_duration;
+
+      if (active.item.item_duration === 0) {
+        if (Math.abs(renderTimeMs - pts) <= 50) {
+          result.push(active.item);
+        }
+      } else if (renderTimeMs >= pts - 50 && renderTimeMs <= active.expiresAt) {
+        result.push(active.item);
+      }
+    }
+    return result;
+  }
+
+  /**
+   * Returns text overlays that are still within their display window at renderTimeMs.
+   */
+  private collectActiveTexts(renderTimeMs: number): MSPTextOverlay[] {
+    const result: MSPTextOverlay[] = [];
+    for (const [, active] of this.activeTexts) {
+      const pts = active.item.item_duration === 0
+        ? active.expiresAt
+        : active.expiresAt - active.item.item_duration;
+
+      if (active.item.item_duration === 0) {
+        if (Math.abs(renderTimeMs - pts) <= 50) {
+          result.push(active.item);
+        }
+      } else if (renderTimeMs >= pts - 50 && renderTimeMs <= active.expiresAt) {
+        result.push(active.item);
+      }
+    }
+    return result;
   }
 
   private updateDebugInfo(currentTimeMs: number | null, frame: MSPData | null): void {
@@ -458,10 +553,12 @@ export class OverlayRenderer {
 
   private handleSeeking = (): void => {
     this.pausedFrame = null;
+    this.activeDetections.clear();
+    this.activeTexts.clear();
     this.updateDebugInfo(this.getCurrentTimeMs(), this.findClosestFrame(false));
   };
 
-  private generateColor(type: string): string {
+  private generateColor = (type: string): string => {
     const assignedColor = this.assignedTypeColors.get(type);
 
     if (assignedColor) {
@@ -472,7 +569,7 @@ export class OverlayRenderer {
     const color = palette[this.assignedTypeColors.size % palette.length];
     this.assignedTypeColors.set(type, color);
     return color;
-  }
+  };
 
   private clearCanvas(): void {
     if (!this.ctx || !this.canvas) return;
