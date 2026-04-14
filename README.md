@@ -1,6 +1,8 @@
 # msp.js
 
-Metadata over SEI Protocol (MSP) parsing and overlay rendering library for video streams.
+[中文文档](README_zh.md)
+
+MSP (Metadata over SEI Protocol) parsing and overlay rendering library for video streams. See [`docs/metadata-over-sei-protocol.txt`](docs/metadata-over-sei-protocol.txt) for the protocol specification.
 
 ## Install
 
@@ -8,44 +10,79 @@ Metadata over SEI Protocol (MSP) parsing and overlay rendering library for video
 npm install msp.js
 ```
 
-## Basic Usage
+## Usage
 
 ```ts
 import { MSPOverlay } from 'msp.js';
 
 const video = document.getElementById('video') as HTMLVideoElement;
 
-const overlay = new MSPOverlay();
+const overlay = new MSPOverlay({
+  lineWidth: 2,
+  labelFields: ['object_id', 'type', 'confidence']
+});
+
 overlay.attachMedia(video);
 overlay.show();
 
-overlay.pushData({
-  type: 5,
-  size: 0,
-  uuid: new Uint8Array([
-    0x83, 0xA1, 0x61, 0xC4,
-    0x31, 0xA7, 0x4B, 0xD8,
-    0xA6, 0x93, 0x52, 0x11,
-    0x3A, 0x41, 0x10, 0x7E
-  ]),
-  user_data: new Uint8Array([
-    // Compact Payload V2 binary payload
-  ]),
-  pts: video.currentTime * 1000
-});
+// Feed SEI data from your video player, e.g. mpegts.js SEI_ARRIVED event
+overlay.pushData(seiData);
+
+// Reconfigure at any time
+overlay.configure({ lineWidth: 3 });
+
+// Clean up
+overlay.detachMedia();
 ```
 
-`pushData()` expects raw SEI payload data and parses it into detections internally.
+### `RendererConfig`
 
-For parsed detections, `bbox.cx` and `bbox.cy` are center coordinates.
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `boxColor` | `string \| null` | `null` | Default box color; `null` assigns colors per type automatically |
+| `lineWidth` | `number` | `2` | Box stroke width in pixels |
+| `labelFields` | `LabelField[]` | all fields | Fields shown in the detection label |
+| `typeConfigs` | `Record<string, TypeConfig>` | `{}` | Per-type color and style overrides |
+| `textConfig` | `TextConfig` | see below | OSD text rendering style |
+| `maxDetectionFrames` | `number` | `100` | Frame buffer size for PTS matching |
+
+`TextConfig` defaults: `fontFamily: 'Arial'`, `fontSize: 16`, `padding: 4`, `textColor: '#ffffff'`, `backgroundColor: 'rgba(0,0,0,0.6)'`.
+
+### `getDebugInfo()`
+
+Returns sync and buffer diagnostics:
+
+```ts
+interface DebugInfo {
+  videoCurrentTimeMs: number | null;
+  seiPtsMs: number | null;
+  diffMs: number | null;
+  bufferedFrames: number;
+  firstBufferedPtsMs: number | null;
+  lastBufferedPtsMs: number | null;
+  matchedFrameIndex: number | null;
+  paused: boolean;
+}
+```
 
 ## Build
 
 ```bash
 npm install
-npm run build
+npm run build:all   # type declarations + UMD + ES module
+npm run build       # UMD only
+npm run build:tsc   # type declarations only
+```
+
+Output goes to `dist/`.
+
+## Test
+
+```bash
+npm test            # watch mode
+npx vitest --run    # single run
 ```
 
 ## Demo
 
-Open [`examples/index.html`](examples/index.html) after building.
+Build first, then open [`examples/index.html`](examples/index.html) in a browser. The demo uses [mpegts.js](https://github.com/xqq/mpegts.js) to play an MPEG-TS live stream and feeds SEI data to `MSPOverlay` via the `SEI_ARRIVED` event.
