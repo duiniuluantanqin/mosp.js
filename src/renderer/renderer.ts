@@ -1,6 +1,6 @@
 import type { MSPData, MSPDetection, MSPTextOverlay } from '../parser/parser';
 import { renderDetection as renderDetectionImpl } from './render-detection.js';
-import { renderTextOverlay as renderTextOverlayImpl, resolveTextBoxPosition as resolveTextBoxPositionImpl } from './render-text.js';
+import { renderTextOverlay as renderTextOverlayImpl} from './render-text.js';
 
 export type LabelField = 'object_id' | 'type' | 'confidence' | 'bbox' | 'angle';
 
@@ -85,6 +85,10 @@ export class Renderer {
   private activeDetections = new Map<number, ActiveItem<MSPDetection>>();
   /** Active text overlays keyed by item_id, supporting item_duration persistence. */
   private activeTexts = new Map<number, ActiveItem<MSPTextOverlay>>();
+  /** Standalone detections (item_id === 0): replaced wholesale each frame, never merged. */
+  private standaloneDetections: ActiveItem<MSPDetection>[] = [];
+  /** Standalone text overlays (item_id === 0): replaced wholesale each frame, never merged. */
+  private standaloneTexts: ActiveItem<MSPTextOverlay>[] = [];
 
   private debugInfo: DebugInfo = {
     videoCurrentTimeMs: null,
@@ -276,6 +280,8 @@ export class Renderer {
     this.pausedFrame = null;
     this.activeDetections.clear();
     this.activeTexts.clear();
+    this.standaloneDetections = [];
+    this.standaloneTexts = [];
     this.assignedTypeColors.clear();
     this.debugInfo = {
       videoCurrentTimeMs: this.getCurrentTimeMs(),
@@ -355,20 +361,44 @@ export class Renderer {
    * Each item's expiry is computed as pts + item_duration.
    * If item_duration === 0, the item expires immediately after the current frame
    * (we set expiresAt = pts so it only renders when currentTime ≈ pts).
+   *
+   * Items with item_id === 0 are standalone: they are never merged into the keyed
+   * map and instead replace the standalone arrays wholesale each frame.
    */
   private applyFrameItems(frame: MSPData): void {
+    const newStandaloneDetections: ActiveItem<MSPDetection>[] = [];
+    const newStandaloneTexts: ActiveItem<MSPTextOverlay>[] = [];
+
     for (const detection of frame.detections) {
       const expiresAt = detection.item_duration > 0
         ? frame.pts + detection.item_duration
         : frame.pts;
-      this.activeDetections.set(detection.item_id, { item: detection, expiresAt });
+      if (detection.item_id === 0) {
+        newStandaloneDetections.push({ item: detection, expiresAt });
+      } else {
+        this.activeDetections.set(detection.item_id, { item: detection, expiresAt });
+      }
     }
 
     for (const text of frame.texts) {
       const expiresAt = text.item_duration > 0
         ? frame.pts + text.item_duration
         : frame.pts;
-      this.activeTexts.set(text.item_id, { item: text, expiresAt });
+      if (text.item_id === 0) {
+        newStandaloneTexts.push({ item: text, expiresAt });
+      } else {
+        this.activeTexts.set(text.item_id, { item: text, expiresAt });
+      }
+    }
+
+    // Replace standalone arrays only when the current frame actually contains
+    // standalone items, so previously received standalone items with item_duration > 0
+    // can still persist across frames that don't send any.
+    if (newStandaloneDetections.length > 0) {
+      this.standaloneDetections = newStandaloneDetections;
+    }
+    if (newStandaloneTexts.length > 0) {
+      this.standaloneTexts = newStandaloneTexts;
     }
   }
 
@@ -379,7 +409,8 @@ export class Renderer {
    */
   private collectActiveDetections(renderTimeMs: number): MSPDetection[] {
     const result: MSPDetection[] = [];
-    for (const [, active] of this.activeDetections) {
+
+    const collect = (active: ActiveItem<MSPDetection>): void => {
       const pts = active.item.item_duration === 0
         ? active.expiresAt
         : active.expiresAt - active.item.item_duration;
@@ -391,7 +422,15 @@ export class Renderer {
       } else if (renderTimeMs >= pts - 50 && renderTimeMs <= active.expiresAt) {
         result.push(active.item);
       }
+    };
+
+    for (const [, active] of this.activeDetections) {
+      collect(active);
     }
+    for (const active of this.standaloneDetections) {
+      collect(active);
+    }
+
     return result;
   }
 
@@ -400,7 +439,8 @@ export class Renderer {
    */
   private collectActiveTexts(renderTimeMs: number): MSPTextOverlay[] {
     const result: MSPTextOverlay[] = [];
-    for (const [, active] of this.activeTexts) {
+
+    const collect = (active: ActiveItem<MSPTextOverlay>): void => {
       const pts = active.item.item_duration === 0
         ? active.expiresAt
         : active.expiresAt - active.item.item_duration;
@@ -412,7 +452,15 @@ export class Renderer {
       } else if (renderTimeMs >= pts - 50 && renderTimeMs <= active.expiresAt) {
         result.push(active.item);
       }
+    };
+
+    for (const [, active] of this.activeTexts) {
+      collect(active);
     }
+    for (const active of this.standaloneTexts) {
+      collect(active);
+    }
+
     return result;
   }
 
@@ -504,10 +552,6 @@ export class Renderer {
     });
   }
 
-  private resolveTextBoxPosition(anchorType: number, x: number, y: number, width: number, height: number): { x: number; y: number } {
-    return resolveTextBoxPositionImpl(anchorType, x, y, width, height);
-  }
-
   private getDisplayedVideoRect(): VideoRect {
     if (!this.canvas || !this.mediaElement) {
       return { x: 0, y: 0, width: 0, height: 0 };
@@ -555,6 +599,8 @@ export class Renderer {
     this.pausedFrame = null;
     this.activeDetections.clear();
     this.activeTexts.clear();
+    this.standaloneDetections = [];
+    this.standaloneTexts = [];
     this.updateDebugInfo(this.getCurrentTimeMs(), this.findClosestFrame(false));
   };
 

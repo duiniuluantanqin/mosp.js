@@ -348,8 +348,8 @@ describe('MSPOverlay', () => {
     const forkliftColor = renderer.generateColor('forklift');
 
     expect(personColor).toBe('#ff4d4f');
-    expect(vehicleColor).toBe('#fa8c16');
-    expect(forkliftColor).toBe('#fadb14');
+    expect(vehicleColor).toBe('#52c41a');
+    expect(forkliftColor).toBe('#fa8c16');
     expect(renderer.generateColor('person')).toBe(personColor);
   });
 
