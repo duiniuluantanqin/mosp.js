@@ -1,4 +1,4 @@
-import type { MSPDetection } from '../parser/parser';
+import type { MOSPDetection } from '../parser/parser';
 import type { LabelField, TypeConfig, VideoRect } from './renderer';
 
 type DetectionRendererConfig = {
@@ -11,7 +11,7 @@ type DetectionRendererConfig = {
 type RenderDetectionOptions = {
   ctx: CanvasRenderingContext2D;
   mediaElement: HTMLVideoElement;
-  detection: MSPDetection;
+  detection: MOSPDetection;
   videoRect: VideoRect;
   config: DetectionRendererConfig;
   generateColor: (type: string) => string;
@@ -68,7 +68,7 @@ export function renderDetection({
   }
 }
 
-function buildLabel(detection: MSPDetection, fields: LabelField[]): string {
+function buildLabel(detection: MOSPDetection, fields: LabelField[]): string {
   const parts: string[] = [];
 
   fields.forEach((field) => {
@@ -128,7 +128,7 @@ function drawLabel(
   ctx.fillText(text, x + padding, labelY + padding);
 }
 
-function isNormalizedBbox(detection: MSPDetection): boolean {
+function isNormalizedBbox(detection: MOSPDetection): boolean {
   const { cx, cy, width, height } = detection.bbox;
   return cx <= 1 && cy <= 1 && width <= 1 && height <= 1;
 }

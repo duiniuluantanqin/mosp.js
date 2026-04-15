@@ -6,7 +6,7 @@ import {
   readUint32BE
 } from '../utils/utils';
 
-export interface MSPBoundingBox {
+export interface MOSPBoundingBox {
   cx: number;
   cy: number;
   width: number;
@@ -14,17 +14,17 @@ export interface MSPBoundingBox {
   angle: number;
 }
 
-export interface MSPDetection {
+export interface MOSPDetection {
   item_id: number;
   item_duration: number; // ms
   object_id: number;
   type: string;
   confidence: number;
-  bbox: MSPBoundingBox;
+  bbox: MOSPBoundingBox;
   distance: number; // mm
 }
 
-export interface MSPTextOverlay {
+export interface MOSPTextOverlay {
   item_id: number;
   item_duration: number; // ms
   text: string;
@@ -38,10 +38,10 @@ export interface MSPTextOverlay {
   bg_color: number;
 }
 
-export interface MSPData {
+export interface MOSPData {
   pts: number;
-  detections: MSPDetection[];
-  texts: MSPTextOverlay[];
+  detections: MOSPDetection[];
+  texts: MOSPTextOverlay[];
 }
 
 export interface SEIData {
@@ -52,23 +52,23 @@ export interface SEIData {
   pts?: number;
 }
 
-const MSP_VERSION_V1 = 1;
-const MSP_UUID_V1 = new Uint8Array([
+const MOSP_VERSION_V1 = 1;
+const MOSP_UUID_V1 = new Uint8Array([
   0x4D, 0x45, 0x54, 0x41, 0x44, 0x41, 0x54, 0x41,
   0x53, 0x45, 0x49, 0x42, 0x59, 0x43, 0x48, 0x42
 ]);
 
-const MSP_HEADER_SIZE_V1 = 4;
-const MSP_ITEM_HEADER_SIZE = 4; // item_id(1) + item_type(1) + item_duration(2)
-const MSP_BBOX_ITEM_TYPE = 1;
-const MSP_TEXT_ITEM_TYPE = 2;
-const MSP_BBOX_FIXED_SIZE = 18;
-const MSP_TEXT_FIXED_SIZE = 20;
+const MOSP_HEADER_SIZE_V1 = 4;
+const MOSP_ITEM_HEADER_SIZE = 4; // item_id(1) + item_type(1) + item_duration(2)
+const MOSP_BBOX_ITEM_TYPE = 1;
+const MOSP_TEXT_ITEM_TYPE = 2;
+const MOSP_BBOX_FIXED_SIZE = 18;
+const MOSP_TEXT_FIXED_SIZE = 20;
 
-export class MSPParser {
+export class MOSPParser {
   private readonly decoder = new TextDecoder();
 
-  parse(data: any): MSPData | null {
+  parse(data: any): MOSPData | null {
     if (data && typeof data === 'object' && 'uuid' in data && 'user_data' in data) {
       return this.parseFromSEIData(data as SEIData);
     }
@@ -76,13 +76,13 @@ export class MSPParser {
     return null;
   }
 
-  private parseFromSEIData(seiData: SEIData): MSPData | null {
+  private parseFromSEIData(seiData: SEIData): MOSPData | null {
     try {
-      if (!buffersAreEqual(seiData.uuid, MSP_UUID_V1)) {
+      if (!buffersAreEqual(seiData.uuid, MOSP_UUID_V1)) {
         return null;
       }
 
-      const parsed = this.parseMSP_V1(seiData.user_data);
+      const parsed = this.parseMOSP_V1(seiData.user_data);
       if (!parsed) {
         return null;
       }
@@ -93,39 +93,39 @@ export class MSPParser {
         texts: parsed.texts
       };
     } catch (error) {
-      console.error('MSP parsing error:', error);
+      console.error('MOSP parsing error:', error);
       return null;
     }
   }
 
-  private parseMSP_V1(payload: Uint8Array): Omit<MSPData, 'pts'> | null {
-    if (!payload || payload.byteLength < MSP_HEADER_SIZE_V1) {
+  private parseMOSP_V1(payload: Uint8Array): Omit<MOSPData, 'pts'> | null {
+    if (!payload || payload.byteLength < MOSP_HEADER_SIZE_V1) {
       return null;
     }
 
     const version = payload[0];
-    if (version !== MSP_VERSION_V1) {
-      console.warn(`Unsupported MSP payload version: ${version}`);
+    if (version !== MOSP_VERSION_V1) {
+      console.warn(`Unsupported MOSP payload version: ${version}`);
       return null;
     }
 
     const itemCount = payload[3];
 
-    const detections: MSPDetection[] = [];
-    const texts: MSPTextOverlay[] = [];
-    let offset = MSP_HEADER_SIZE_V1;
+    const detections: MOSPDetection[] = [];
+    const texts: MOSPTextOverlay[] = [];
+    let offset = MOSP_HEADER_SIZE_V1;
 
     for (let i = 0; i < itemCount; i++) {
-      if (offset + MSP_ITEM_HEADER_SIZE > payload.byteLength) {
+      if (offset + MOSP_ITEM_HEADER_SIZE > payload.byteLength) {
         return null;
       }
 
       const itemId = payload[offset];
       const itemType = payload[offset + 1];
       const itemDuration = readUint16BE(payload, offset + 2);
-      const itemPayloadOffset = offset + MSP_ITEM_HEADER_SIZE;
+      const itemPayloadOffset = offset + MOSP_ITEM_HEADER_SIZE;
 
-      if (itemType === MSP_BBOX_ITEM_TYPE) {
+      if (itemType === MOSP_BBOX_ITEM_TYPE) {
         if (itemPayloadOffset + 3 > payload.byteLength) {
           return null;
         }
@@ -135,8 +135,8 @@ export class MSPParser {
           return null;
         }
         detections.push(detection);
-        offset = itemPayloadOffset + MSP_BBOX_FIXED_SIZE + typeLength;
-      } else if (itemType === MSP_TEXT_ITEM_TYPE) {
+        offset = itemPayloadOffset + MOSP_BBOX_FIXED_SIZE + typeLength;
+      } else if (itemType === MOSP_TEXT_ITEM_TYPE) {
         if (itemPayloadOffset + 11 > payload.byteLength) {
           return null;
         }
@@ -146,7 +146,7 @@ export class MSPParser {
           return null;
         }
         texts.push(text);
-        offset = itemPayloadOffset + MSP_TEXT_FIXED_SIZE + textLength;
+        offset = itemPayloadOffset + MOSP_TEXT_FIXED_SIZE + textLength;
       } else {
         // Unknown item type — cannot determine payload length, abort
         return null;
@@ -164,13 +164,13 @@ export class MSPParser {
     return { detections, texts };
   }
 
-  private parseBBoxItem(payload: Uint8Array, offset: number, itemId: number, itemDuration: number): MSPDetection | null {
-    if (offset + MSP_BBOX_FIXED_SIZE > payload.byteLength) {
+  private parseBBoxItem(payload: Uint8Array, offset: number, itemId: number, itemDuration: number): MOSPDetection | null {
+    if (offset + MOSP_BBOX_FIXED_SIZE > payload.byteLength) {
       return null;
     }
 
     const typeLength = payload[offset + 2];
-    const typeStart = offset + MSP_BBOX_FIXED_SIZE;
+    const typeStart = offset + MOSP_BBOX_FIXED_SIZE;
     const typeEnd = typeStart + typeLength;
 
     if (typeEnd > payload.byteLength) {
@@ -204,13 +204,13 @@ export class MSPParser {
     };
   }
 
-  private parseTextItem(payload: Uint8Array, offset: number, itemId: number, itemDuration: number): MSPTextOverlay | null {
-    if (offset + MSP_TEXT_FIXED_SIZE > payload.byteLength) {
+  private parseTextItem(payload: Uint8Array, offset: number, itemId: number, itemDuration: number): MOSPTextOverlay | null {
+    if (offset + MOSP_TEXT_FIXED_SIZE > payload.byteLength) {
       return null;
     }
 
     const textLength = payload[offset + 10];
-    const textStart = offset + MSP_TEXT_FIXED_SIZE;
+    const textStart = offset + MOSP_TEXT_FIXED_SIZE;
     const textEnd = textStart + textLength;
 
     if (textEnd > payload.byteLength) {

@@ -1,23 +1,23 @@
-# msp.js
+# mosp.js
 
 [English](README.md)
 
-MSP（Metadata over SEI Protocol）视频流元数据解析与叠加渲染库。协议规范详见 [`docs/metadata-over-sei-protocol.txt`](docs/metadata-over-sei-protocol.txt)。
+MOSP（Metadata over SEI Protocol）视频流元数据解析与叠加渲染库。协议规范详见 [`docs/metadata-over-sei-protocol.txt`](docs/metadata-over-sei-protocol.txt)。
 
 ## 安装
 
 ```bash
-npm install msp.js
+npm install mosp.js
 ```
 
 ## 使用
 
 ```ts
-import { MSPOverlay } from 'msp.js';
+import { MOSPOverlay } from 'mosp.js';
 
 const video = document.getElementById('video') as HTMLVideoElement;
 
-const overlay = new MSPOverlay({
+const overlay = new MOSPOverlay({
   lineWidth: 2,
   labelFields: ['object_id', 'type', 'confidence']
 });
@@ -85,4 +85,4 @@ npx vitest --run    # 单次运行
 
 ## Demo
 
-先执行构建，然后在浏览器中打开 [`examples/index.html`](examples/index.html)。Demo 使用 [mpegts.js](https://github.com/xqq/mpegts.js) 播放 MPEG-TS 直播流，并通过 `SEI_ARRIVED` 事件将 SEI 数据传入 `MSPOverlay`。
+先执行构建，然后在浏览器中打开 [`examples/index.html`](examples/index.html)。Demo 使用 [mpegts.js](https://github.com/xqq/mpegts.js) 播放 MPEG-TS 直播流，并通过 `SEI_ARRIVED` 事件将 SEI 数据传入 `MOSPOverlay`。

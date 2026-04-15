@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { MSPOverlay } from '../src/msp-overlay/msp-overlay';
+import { MOSPOverlay } from '../src/mosp-overlay/mosp-overlay';
 
-describe('MSPOverlay', () => {
-  let overlay: MSPOverlay;
+describe('MOSPOverlay', () => {
+  let overlay: MOSPOverlay;
   let videoElement: HTMLVideoElement;
   let getContextSpy: { mockRestore: () => void };
   let originalResizeObserver: typeof ResizeObserver | undefined;
@@ -35,7 +35,7 @@ describe('MSPOverlay', () => {
       value: MockResizeObserver
     });
 
-    overlay = new MSPOverlay({
+    overlay = new MOSPOverlay({
       boxColor: '#30d6b0',
       lineWidth: 2,
       labelFields: ['object_id', 'type', 'confidence', 'angle']
@@ -234,7 +234,7 @@ describe('MSPOverlay', () => {
     expect(resizeObserverDisconnect).toHaveBeenCalled();
   });
 
-  it('should push MSP data with normalized coordinates', () => {
+  it('should push MOSP data with normalized coordinates', () => {
     overlay.attachMedia(videoElement);
 
     const mockData = {
@@ -270,7 +270,7 @@ describe('MSPOverlay', () => {
     expect(() => overlay.pushData(mockData)).not.toThrow();
   });
 
-  it('should push MSP data with pixel coordinates', () => {
+  it('should push MOSP data with pixel coordinates', () => {
     overlay.attachMedia(videoElement);
 
     const mockData = {

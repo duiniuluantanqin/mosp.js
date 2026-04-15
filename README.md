@@ -1,23 +1,23 @@
-# msp.js
+# mosp.js
 
 [中文文档](README_zh.md)
 
-MSP (Metadata over SEI Protocol) parsing and overlay rendering library for video streams. See [`docs/metadata-over-sei-protocol.txt`](docs/metadata-over-sei-protocol.txt) for the protocol specification.
+MOSP (Metadata over SEI Protocol) parsing and overlay rendering library for video streams. See [`docs/metadata-over-sei-protocol.txt`](docs/metadata-over-sei-protocol.txt) for the protocol specification.
 
 ## Install
 
 ```bash
-npm install msp.js
+npm install mosp.js
 ```
 
 ## Usage
 
 ```ts
-import { MSPOverlay } from 'msp.js';
+import { MOSPOverlay } from 'mosp.js';
 
 const video = document.getElementById('video') as HTMLVideoElement;
 
-const overlay = new MSPOverlay({
+const overlay = new MOSPOverlay({
   lineWidth: 2,
   labelFields: ['object_id', 'type', 'confidence']
 });
@@ -85,4 +85,4 @@ npx vitest --run    # single run
 
 ## Demo
 
-Build first, then open [`examples/index.html`](examples/index.html) in a browser. The demo uses [mpegts.js](https://github.com/xqq/mpegts.js) to play an MPEG-TS live stream and feeds SEI data to `MSPOverlay` via the `SEI_ARRIVED` event.
+Build first, then open [`examples/index.html`](examples/index.html) in a browser. The demo uses [mpegts.js](https://github.com/xqq/mpegts.js) to play an MPEG-TS live stream and feeds SEI data to `MOSPOverlay` via the `SEI_ARRIVED` event.

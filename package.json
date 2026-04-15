@@ -1,8 +1,8 @@
 {
-  "name": "msp.js",
+  "name": "mosp.js",
   "version": "1.0.0",
   "main": "./dist/index.js",
-  "umd:main": "./dist/msp.js",
+  "umd:main": "./dist/mosp.js",
   "module": "./dist/index.mjs",
   "files": [
     "dist",
@@ -12,19 +12,19 @@
   "exports": {
     ".": {
       "types": "./dist/types/index.d.ts",
-      "umd": "./dist/msp.js",
+      "umd": "./dist/mosp.js",
       "import": "./dist/es/index.mjs",
       "require": "./dist/cjs/index.js"
     }
   },
   "author": "",
-  "description": "msp.js: Metadata over SEI Protocol (MSP) parsing and overlay rendering library for video streams",
-  "keywords": ["msp", "metadata-over-sei-protocol", "sei", "h264", "h265", "video", "overlay"],
+  "description": "mosp.js: Metadata over SEI Protocol (MOSP) parsing and overlay rendering library for video streams",
+  "keywords": ["mosp", "metadata-over-sei-protocol", "sei", "h264", "h265", "video", "overlay"],
   "repository": {
     "type": "git",
     "url": ""
   },
-  "homepage": "https://github.com/duiniuluantanqin/msp.js",
+  "homepage": "https://github.com/duiniuluantanqin/mosp.js",
   "license": "MIT",
   "scripts": {
     "prebuild": "rimraf dist",

@@ -1,4 +1,4 @@
-import type { MSPData, MSPDetection, MSPTextOverlay } from '../parser/parser';
+import type { MOSPData, MOSPDetection, MOSPTextOverlay } from '../parser/parser';
 import { renderDetection as renderDetectionImpl } from './render-detection.js';
 import { renderTextOverlay as renderTextOverlayImpl} from './render-text.js';
 
@@ -75,20 +75,20 @@ export class Renderer {
   private ctx: CanvasRenderingContext2D | null = null;
   private mediaElement: HTMLVideoElement | null = null;
   private resizeObserver: ResizeObserver | null = null;
-  private frames: MSPData[] = [];
+  private frames: MOSPData[] = [];
   private visible = false;
   private animationFrameId: number | null = null;
-  private pausedFrame: MSPData | null = null;
+  private pausedFrame: MOSPData | null = null;
   private assignedTypeColors = new Map<string, string>();
 
   /** Active detections keyed by item_id, supporting item_duration persistence. */
-  private activeDetections = new Map<number, ActiveItem<MSPDetection>>();
+  private activeDetections = new Map<number, ActiveItem<MOSPDetection>>();
   /** Active text overlays keyed by item_id, supporting item_duration persistence. */
-  private activeTexts = new Map<number, ActiveItem<MSPTextOverlay>>();
+  private activeTexts = new Map<number, ActiveItem<MOSPTextOverlay>>();
   /** Standalone detections (item_id === 0): replaced wholesale each frame, never merged. */
-  private standaloneDetections: ActiveItem<MSPDetection>[] = [];
+  private standaloneDetections: ActiveItem<MOSPDetection>[] = [];
   /** Standalone text overlays (item_id === 0): replaced wholesale each frame, never merged. */
-  private standaloneTexts: ActiveItem<MSPTextOverlay>[] = [];
+  private standaloneTexts: ActiveItem<MOSPTextOverlay>[] = [];
 
   private debugInfo: DebugInfo = {
     videoCurrentTimeMs: null,
@@ -223,7 +223,7 @@ export class Renderer {
     this.ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
   };
 
-  pushFrame(frame: MSPData): void {
+  pushFrame(frame: MOSPData): void {
     this.frames.push(frame);
 
     while (this.frames.length > this.config.maxDetectionFrames) {
@@ -365,9 +365,9 @@ export class Renderer {
    * Items with item_id === 0 are standalone: they are never merged into the keyed
    * map and instead replace the standalone arrays wholesale each frame.
    */
-  private applyFrameItems(frame: MSPData): void {
-    const newStandaloneDetections: ActiveItem<MSPDetection>[] = [];
-    const newStandaloneTexts: ActiveItem<MSPTextOverlay>[] = [];
+  private applyFrameItems(frame: MOSPData): void {
+    const newStandaloneDetections: ActiveItem<MOSPDetection>[] = [];
+    const newStandaloneTexts: ActiveItem<MOSPTextOverlay>[] = [];
 
     for (const detection of frame.detections) {
       const expiresAt = detection.item_duration > 0
@@ -407,10 +407,10 @@ export class Renderer {
    * Items with item_duration === 0 are only shown when renderTimeMs is within
    * a ±50 ms window of their frame pts.
    */
-  private collectActiveDetections(renderTimeMs: number): MSPDetection[] {
-    const result: MSPDetection[] = [];
+  private collectActiveDetections(renderTimeMs: number): MOSPDetection[] {
+    const result: MOSPDetection[] = [];
 
-    const collect = (active: ActiveItem<MSPDetection>): void => {
+    const collect = (active: ActiveItem<MOSPDetection>): void => {
       const pts = active.item.item_duration === 0
         ? active.expiresAt
         : active.expiresAt - active.item.item_duration;
@@ -437,10 +437,10 @@ export class Renderer {
   /**
    * Returns text overlays that are still within their display window at renderTimeMs.
    */
-  private collectActiveTexts(renderTimeMs: number): MSPTextOverlay[] {
-    const result: MSPTextOverlay[] = [];
+  private collectActiveTexts(renderTimeMs: number): MOSPTextOverlay[] {
+    const result: MOSPTextOverlay[] = [];
 
-    const collect = (active: ActiveItem<MSPTextOverlay>): void => {
+    const collect = (active: ActiveItem<MOSPTextOverlay>): void => {
       const pts = active.item.item_duration === 0
         ? active.expiresAt
         : active.expiresAt - active.item.item_duration;
@@ -464,7 +464,7 @@ export class Renderer {
     return result;
   }
 
-  private updateDebugInfo(currentTimeMs: number | null, frame: MSPData | null): void {
+  private updateDebugInfo(currentTimeMs: number | null, frame: MOSPData | null): void {
     const matchedFrameIndex = frame ? this.frames.indexOf(frame) : -1;
 
     this.debugInfo = {
@@ -488,7 +488,7 @@ export class Renderer {
     return Number.isFinite(currentTimeMs) ? currentTimeMs : null;
   }
 
-  private findClosestFrame(allowPausedFrame: boolean = true): MSPData | null {
+  private findClosestFrame(allowPausedFrame: boolean = true): MOSPData | null {
     if (this.frames.length === 0) return null;
 
     if (allowPausedFrame && this.pausedFrame) {
@@ -504,7 +504,7 @@ export class Renderer {
       return null;
     }
 
-    let closest: MSPData | null = null;
+    let closest: MOSPData | null = null;
     let minDiff = Number.POSITIVE_INFINITY;
 
     for (let i = this.frames.length - 1; i >= 0; i--) {
@@ -529,7 +529,7 @@ export class Renderer {
     return minDiff <= 100 ? closest : null;
   }
 
-  private renderDetection(detection: MSPDetection, videoRect: VideoRect): void {
+  private renderDetection(detection: MOSPDetection, videoRect: VideoRect): void {
     if (!this.ctx || !this.mediaElement) return;
     renderDetectionImpl({
       ctx: this.ctx,
@@ -541,7 +541,7 @@ export class Renderer {
     });
   }
 
-  private renderTextOverlay(textOverlay: MSPTextOverlay, videoRect: VideoRect): void {
+  private renderTextOverlay(textOverlay: MOSPTextOverlay, videoRect: VideoRect): void {
     if (!this.ctx || !this.mediaElement) return;
     renderTextOverlayImpl({
       ctx: this.ctx,

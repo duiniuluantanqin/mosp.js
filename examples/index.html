@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>msp.js Demo</title>
+  <title>mosp.js Demo</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -101,7 +101,7 @@
   </div>
 
   <script src="mpegts.js"></script>
-  <script src="../dist/msp.js"></script>
+  <script src="../dist/mosp.js"></script>
 
   <script>
     (function() {
@@ -134,7 +134,7 @@
       let debugPanelRafId = null;
       let debugPanelVisible = true;
 
-      const overlay = new msp.MSPOverlay({
+      const overlay = new mosp.MOSPOverlay({
         maxDetectionFrames: 400,
         lineWidth: 2,
         labelFields: ['object_id', 'type', 'confidence']

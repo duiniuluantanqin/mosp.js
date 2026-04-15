@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { MSPParser } from '../src/parser/parser';
+import { MOSPParser } from '../src/parser/parser';
 
 const uuid = new Uint8Array([
   0x4D, 0x45, 0x54, 0x41,
@@ -164,12 +164,12 @@ function createPayload(items: Uint8Array[]): Uint8Array {
   return payload;
 }
 
-describe('MSPParser', () => {
-  let parser: MSPParser;
+describe('MOSPParser', () => {
+  let parser: MOSPParser;
   let warnSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
-    parser = new MSPParser();
+    parser = new MOSPParser();
     warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
   });
 

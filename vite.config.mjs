@@ -6,9 +6,9 @@ export default defineConfig({
     sourcemap: true,
     lib: {
       entry: resolve(__dirname, 'src/index.ts'),
-      name: 'msp',
+      name: 'mosp',
       formats: ['umd'],
-      fileName: () => 'msp.js',
+      fileName: () => 'mosp.js',
     },
     outDir: 'dist',
   },

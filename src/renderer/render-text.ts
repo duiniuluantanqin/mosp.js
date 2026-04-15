@@ -1,4 +1,4 @@
-import type { MSPTextOverlay } from '../parser/parser';
+import type { MOSPTextOverlay } from '../parser/parser';
 import type { TextConfig, VideoRect } from './renderer';
 
 type ResolvedTextConfig = Required<Omit<TextConfig, 'backgroundColor' | 'strokeColor'>> & {
@@ -9,7 +9,7 @@ type ResolvedTextConfig = Required<Omit<TextConfig, 'backgroundColor' | 'strokeC
 type RenderTextOverlayOptions = {
   ctx: CanvasRenderingContext2D;
   mediaElement: HTMLVideoElement;
-  textOverlay: MSPTextOverlay;
+  textOverlay: MOSPTextOverlay;
   videoRect: VideoRect;
   textConfig: ResolvedTextConfig;
 };
@@ -87,7 +87,7 @@ export function resolveTextBoxPosition(anchorType: number, x: number, y: number,
   }
 }
 
-function mapTextOverlay(mediaElement: HTMLVideoElement, textOverlay: MSPTextOverlay, videoRect: VideoRect): VideoRect {
+function mapTextOverlay(mediaElement: HTMLVideoElement, textOverlay: MOSPTextOverlay, videoRect: VideoRect): VideoRect {
   const isNormalized = textOverlay.x <= 1 && textOverlay.y <= 1 && textOverlay.width <= 1 && textOverlay.height <= 1;
   if (isNormalized) {
     return {

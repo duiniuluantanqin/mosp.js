@@ -1,12 +1,12 @@
-import { MSPParser } from '../parser/parser';
+import { MOSPParser } from '../parser/parser';
 import { DebugInfo, Renderer, RendererConfig } from '../renderer/renderer';
 
-export class MSPOverlay {
-  private parser: MSPParser;
+export class MOSPOverlay {
+  private parser: MOSPParser;
   private renderer: Renderer;
 
   constructor(config?: RendererConfig) {
-    this.parser = new MSPParser();
+    this.parser = new MOSPParser();
     this.renderer = new Renderer(config);
   }
 
