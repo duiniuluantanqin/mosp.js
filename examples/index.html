@@ -78,6 +78,10 @@
               <input type="checkbox" id="showConfidence" checked>
               显示置信度
             </label>
+            <label>
+              <input type="checkbox" id="showItemDuration">
+              显示 Item Duration
+            </label>
           </div>
 
           <div class="slider-control">
@@ -122,6 +126,7 @@
       const showObjectId = document.getElementById('showObjectId');
       const showType = document.getElementById('showType');
       const showConfidence = document.getElementById('showConfidence');
+      const showItemDuration = document.getElementById('showItemDuration');
       const videoTimestamp = document.getElementById('videoTimestamp');
       const seiTimestamp = document.getElementById('seiTimestamp');
       const timestampDiff = document.getElementById('timestampDiff');
@@ -151,6 +156,7 @@
         if (showObjectId.checked) fields.push('object_id');
         if (showType.checked) fields.push('type');
         if (showConfidence.checked) fields.push('confidence');
+        if (showItemDuration.checked) fields.push('item_duration');
         overlay.configure({ labelFields: fields });
       }
 
@@ -374,6 +380,7 @@
       showObjectId.onchange = updateLabelFields;
       showType.onchange = updateLabelFields;
       showConfidence.onchange = updateLabelFields;
+      showItemDuration.onchange = updateLabelFields;
 
       document.addEventListener('fullscreenchange', function() {
         updateFullscreenButton();

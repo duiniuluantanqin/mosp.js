@@ -97,6 +97,9 @@ function buildLabel(detection: MOSPDetection, fields: LabelField[]): string {
       case 'angle':
         parts.push(`${normalizeAngle(detection.bbox.angle).toFixed(1)}deg`);
         break;
+      case 'item_duration':
+        parts.push(`dur:${detection.item_duration}ms`);
+        break;
     }
   });
 

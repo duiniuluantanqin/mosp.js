@@ -2,7 +2,7 @@ import type { MOSPData, MOSPDetection, MOSPTextOverlay } from '../parser/parser'
 import { renderDetection as renderDetectionImpl } from './render-detection.js';
 import { renderTextOverlay as renderTextOverlayImpl} from './render-text.js';
 
-export type LabelField = 'object_id' | 'type' | 'confidence' | 'bbox' | 'angle';
+export type LabelField = 'object_id' | 'type' | 'confidence' | 'bbox' | 'angle' | 'item_duration';
 
 export interface TypeConfig {
   boxColor?: string;
