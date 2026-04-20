@@ -14,7 +14,7 @@
           <video id="videoElement"></video>
 
           <div class="debug-panel" id="debugPanel">
-            <h3>时间戳调试</h3>
+            <h3>调试面板</h3>
             <div class="debug-grid">
               <div class="debug-item">
                 <span class="debug-label">视频时间戳</span>
@@ -40,16 +40,18 @@
                 <span class="debug-label">最后一帧时间戳</span>
                 <span class="debug-value" id="lastBufferedTimestamp">--</span>
               </div>
+              <div class="debug-item">
+                <span class="debug-label">bbox个数</span>
+                <span class="debug-value" id="bboxCount">--</span>
+              </div>
             </div>
           </div>
         </div>
 
         <div class="player-controls">
-          <button id="playBtn">播放</button>
-          <button id="pauseBtn">暂停</button>
+          <button id="playPauseBtn">播放</button>
           <button id="stopBtn">停止</button>
           <button id="fullscreenBtn">全屏</button>
-          <button id="destroyBtn">销毁播放器</button>
           <button id="toggleDebugBtn">关闭调试面板</button>
           <input
             type="text"
@@ -111,11 +113,9 @@
     (function() {
       const videoElement = document.getElementById('videoElement');
       const streamUrlInput = document.getElementById('streamUrl');
-      const playBtn = document.getElementById('playBtn');
-      const pauseBtn = document.getElementById('pauseBtn');
+      const playPauseBtn = document.getElementById('playPauseBtn');
       const stopBtn = document.getElementById('stopBtn');
       const fullscreenBtn = document.getElementById('fullscreenBtn');
-      const destroyBtn = document.getElementById('destroyBtn');
       const toggleDebugBtn = document.getElementById('toggleDebugBtn');
       const videoContainer = document.getElementById('videoContainer');
       const debugPanel = document.getElementById('debugPanel');
@@ -133,6 +133,7 @@
       const bufferedFrames = document.getElementById('bufferedFrames');
       const firstBufferedTimestamp = document.getElementById('firstBufferedTimestamp');
       const lastBufferedTimestamp = document.getElementById('lastBufferedTimestamp');
+      const bboxCount = document.getElementById('bboxCount');
 
       let player = null;
       let currentUrl = '';
@@ -197,6 +198,7 @@
         bufferedFrames.textContent = matchedFramesText;
         firstBufferedTimestamp.textContent = formatTimestamp(debugInfo.firstBufferedPtsMs);
         lastBufferedTimestamp.textContent = formatTimestamp(debugInfo.lastBufferedPtsMs);
+        bboxCount.textContent = debugInfo.bboxCount.toString();
         debugPanelRafId = requestAnimationFrame(renderDebugPanel);
       }
 
@@ -301,40 +303,51 @@
         currentUrl = url;
       }
 
-      playBtn.onclick = function() {
-        const url = streamUrlInput.value.trim();
-
-        if (!url) {
-          alert('请输入流地址');
-          return;
-        }
-
-        if (typeof mpegts === 'undefined') {
-          alert('mpegts.js 未加载，请检查示例文件');
-          return;
-        }
-
-        if (!mpegts.getFeatureList().mseLivePlayback) {
-          alert('当前浏览器不支持 MSE');
-          return;
-        }
-
-        if (player || currentUrl !== url) {
-          destroyPlayer();
-          resetOverlayData();
-          createPlayer(url);
-        }
-
-        player.play();
-        overlay.show();
-      };
-
-      pauseBtn.onclick = function() {
+      function updatePlayPauseButton() {
         if (!player) {
+          playPauseBtn.textContent = '播放';
           return;
         }
 
-        player.pause();
+        playPauseBtn.textContent = videoElement.paused ? '播放' : '暂停';
+      }
+
+      playPauseBtn.onclick = function() {
+        if (!player) {
+          const url = streamUrlInput.value.trim();
+
+          if (!url) {
+            alert('请输入流地址');
+            return;
+          }
+
+          if (typeof mpegts === 'undefined') {
+            alert('mpegts.js 未加载，请检查示例文件');
+            return;
+          }
+
+          if (!mpegts.getFeatureList().mseLivePlayback) {
+            alert('当前浏览器不支持 MSE');
+            return;
+          }
+
+          if (currentUrl !== url) {
+            destroyPlayer();
+            resetOverlayData();
+            createPlayer(url);
+          }
+
+          player.play();
+          overlay.show();
+          updatePlayPauseButton();
+        } else {
+          if (videoElement.paused) {
+            player.play();
+          } else {
+            player.pause();
+          }
+          updatePlayPauseButton();
+        }
       };
 
       stopBtn.onclick = function() {
@@ -342,10 +355,10 @@
           return;
         }
 
-        player.pause();
-        player.unload();
+        destroyPlayer();
         resetOverlayData();
         currentUrl = '';
+        updatePlayPauseButton();
       };
 
       fullscreenBtn.onclick = function() {
@@ -355,12 +368,6 @@
           console.error('Fullscreen error:', error);
           alert('当前环境不支持全屏或切换失败');
         });
-      };
-
-      destroyBtn.onclick = function() {
-        destroyPlayer();
-        resetOverlayData();
-        currentUrl = '';
       };
 
       toggleDebugBtn.onclick = function() {
@@ -392,6 +399,14 @@
         window.dispatchEvent(new Event('resize'));
       });
 
+      videoElement.addEventListener('play', function() {
+        updatePlayPauseButton();
+      });
+
+      videoElement.addEventListener('pause', function() {
+        updatePlayPauseButton();
+      });
+
       window.addEventListener('beforeunload', function() {
         stopDebugPanel();
         destroyPlayer();
@@ -402,6 +417,7 @@
       globalLineWidthValue.textContent = globalLineWidth.value;
       maxDetectionFramesValue.textContent = maxDetectionFrames.value;
       updateFullscreenButton();
+      updatePlayPauseButton();
       setDebugPanelVisible(true);
       startDebugPanel();
     })();

@@ -38,6 +38,7 @@ export interface DebugInfo {
   lastBufferedPtsMs: number | null;
   matchedFrameIndex: number | null;
   paused: boolean;
+  bboxCount: number;
 }
 
 export type VideoRect = {
@@ -98,7 +99,8 @@ export class Renderer {
     firstBufferedPtsMs: null,
     lastBufferedPtsMs: null,
     matchedFrameIndex: null,
-    paused: false
+    paused: false,
+    bboxCount: 0
   };
 
   private config: {
@@ -291,7 +293,8 @@ export class Renderer {
       firstBufferedPtsMs: null,
       lastBufferedPtsMs: null,
       matchedFrameIndex: null,
-      paused: this.mediaElement?.paused ?? false
+      paused: this.mediaElement?.paused ?? false,
+      bboxCount: 0
     };
     this.clearCanvas();
   }
@@ -344,6 +347,9 @@ export class Renderer {
     const renderTimeMs = currentTimeMs ?? 0;
     const visibleDetections = this.collectActiveDetections(renderTimeMs);
     const visibleTexts = this.collectActiveTexts(renderTimeMs);
+
+    // Update bbox count in debug info
+    this.debugInfo.bboxCount = visibleDetections.length;
 
     if (visibleDetections.length === 0 && visibleTexts.length === 0) return;
 
@@ -475,7 +481,8 @@ export class Renderer {
       firstBufferedPtsMs: this.frames[0]?.pts ?? null,
       lastBufferedPtsMs: this.frames[this.frames.length - 1]?.pts ?? null,
       matchedFrameIndex: matchedFrameIndex >= 0 ? matchedFrameIndex : null,
-      paused: this.mediaElement?.paused ?? false
+      paused: this.mediaElement?.paused ?? false,
+      bboxCount: this.debugInfo.bboxCount
     };
   }
 
