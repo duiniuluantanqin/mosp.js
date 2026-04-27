@@ -1,5 +1,8 @@
 import type { MOSPDetection } from '../parser/parser';
+import { BBoxStyle } from '../parser/parser';
 import type { LabelField, TypeConfig, VideoRect } from './renderer';
+
+const SupportCornerOnly = false; // For Debug
 
 type DetectionRendererConfig = {
   boxColor: string | null;
@@ -26,7 +29,6 @@ export function renderDetection({
   generateColor
 }: RenderDetectionOptions): void {
   const typeConfig = config.typeConfigs[detection.type] || {};
-  const boxColor = typeConfig.boxColor ?? config.boxColor ?? generateColor(detection.type);
   const lineWidth = typeConfig.lineWidth || config.lineWidth;
   const labelFields = typeConfig.labelFields || config.labelFields;
   const isNormalized = isNormalizedBbox(detection);
@@ -35,6 +37,13 @@ export function renderDetection({
   let centerY: number;
   let width: number;
   let height: number;
+  let boxColor: string;
+
+  if (SupportCornerOnly && detection.bbox.color !== undefined) {
+    boxColor = rgbaToHex(detection.bbox.color);
+  } else {
+    boxColor = typeConfig.boxColor ?? config.boxColor ?? generateColor(detection.type);
+  }
 
   if (isNormalized) {
     centerX = videoRect.x + (detection.bbox.cx * videoRect.width);
@@ -59,7 +68,12 @@ export function renderDetection({
   ctx.rotate((angle * Math.PI) / 180);
   ctx.strokeStyle = boxColor;
   ctx.lineWidth = lineWidth;
-  ctx.strokeRect(-(width / 2), -(height / 2), width, height);
+  const style = detection.bbox.style ?? BBoxStyle.BorderSolid;
+  if (SupportCornerOnly && style === BBoxStyle.CornerOnly) {
+    drawCorners(ctx, width, height, lineWidth);
+  } else {
+    ctx.strokeRect(-(width / 2), -(height / 2), width, height);
+  }
   ctx.restore();
 
   if (labelFields.length > 0) {
@@ -139,4 +153,37 @@ function isNormalizedBbox(detection: MOSPDetection): boolean {
 function normalizeAngle(angle: number): number {
   const normalized = angle % 360;
   return normalized < 0 ? normalized + 360 : normalized;
+}
+
+function rgbaToHex(rgba: number): string {
+  const r = (rgba >> 24) & 0xFF;
+  const g = (rgba >> 16) & 0xFF;
+  const b = (rgba >> 8) & 0xFF;
+  const a = rgba & 0xFF;
+  return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}${a.toString(16).padStart(2, '0')}`;
+}
+
+function drawCorners(ctx: CanvasRenderingContext2D, width: number, height: number, lineWidth: number): void {
+  const halfWidth = width / 2;
+  const halfHeight = height / 2;
+  const cornerLength = Math.min(width, height) * 0.2;
+
+  ctx.beginPath();
+  // Top-left
+  ctx.moveTo(-halfWidth, -halfHeight + cornerLength);
+  ctx.lineTo(-halfWidth, -halfHeight);
+  ctx.lineTo(-halfWidth + cornerLength, -halfHeight);
+  // Top-right
+  ctx.moveTo(halfWidth - cornerLength, -halfHeight);
+  ctx.lineTo(halfWidth, -halfHeight);
+  ctx.lineTo(halfWidth, -halfHeight + cornerLength);
+  // Bottom-right
+  ctx.moveTo(halfWidth, halfHeight - cornerLength);
+  ctx.lineTo(halfWidth, halfHeight);
+  ctx.lineTo(halfWidth - cornerLength, halfHeight);
+  // Bottom-left
+  ctx.moveTo(-halfWidth + cornerLength, halfHeight);
+  ctx.lineTo(-halfWidth, halfHeight);
+  ctx.lineTo(-halfWidth, halfHeight - cornerLength);
+  ctx.stroke();
 }

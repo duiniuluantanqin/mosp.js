@@ -174,7 +174,6 @@ item_duration
 
 typedef struct {
     uint16_t id;         // 目标实例 ID
-    uint8_t  type_length;// type 字符串长度
     uint8_t  confidence; // 置信度
     uint16_t cx;         // 框中心 X
     uint16_t cy;         // 框中心 Y
@@ -182,6 +181,9 @@ typedef struct {
     uint16_t h;          // 框高
     uint16_t angle;      // 旋转角度
     uint32_t distance;   // 距离（mm）
+    uint8_t  style;      // 样式，0：CornerOnly，1：BorderSolid
+    uint32_t color;      // 颜色，RGBA， 默认情况下，BorderSolid使用Red，CornerOnly使用Green
+    uint8_t  type_length;// type 字符串长度
     uint8_t  type[type_length]; // 目标类别字符串，UTF-8
 } MOSP_bbox_item_data;
 

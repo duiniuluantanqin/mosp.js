@@ -6,12 +6,19 @@ import {
   readUint32BE
 } from '../utils/utils';
 
+export enum BBoxStyle {
+  CornerOnly = 0,
+  BorderSolid = 1
+}
+
 export interface MOSPBoundingBox {
   cx: number;
   cy: number;
   width: number;
   height: number;
   angle: number;
+  style?: BBoxStyle;
+  color?: number;
 }
 
 export interface MOSPDetection {
@@ -62,7 +69,7 @@ const MOSP_HEADER_SIZE_V1 = 4;
 const MOSP_ITEM_HEADER_SIZE = 4; // item_id(1) + item_type(1) + item_duration(2)
 const MOSP_BBOX_ITEM_TYPE = 1;
 const MOSP_TEXT_ITEM_TYPE = 2;
-const MOSP_BBOX_FIXED_SIZE = 18;
+const MOSP_BBOX_FIXED_SIZE = 23;
 const MOSP_TEXT_FIXED_SIZE = 20;
 
 export class MOSPParser {
@@ -126,10 +133,10 @@ export class MOSPParser {
       const itemPayloadOffset = offset + MOSP_ITEM_HEADER_SIZE;
 
       if (itemType === MOSP_BBOX_ITEM_TYPE) {
-        if (itemPayloadOffset + 3 > payload.byteLength) {
+        if (itemPayloadOffset + MOSP_BBOX_FIXED_SIZE > payload.byteLength) {
           return null;
         }
-        const typeLength = payload[itemPayloadOffset + 2]; // UTF-8 byte length
+        const typeLength = payload[itemPayloadOffset + 22]; // UTF-8 byte length
         const detection = this.parseBBoxItem(payload, itemPayloadOffset, itemId, itemDuration);
         if (!detection) {
           return null;
@@ -169,7 +176,21 @@ export class MOSPParser {
       return null;
     }
 
-    const typeLength = payload[offset + 2];
+    const objectID = readUint16BE(payload, offset);
+    const confidenceQ = payload[offset + 2];
+    const xQ = readUint16BE(payload, offset + 3);
+    const yQ = readUint16BE(payload, offset + 5);
+    const wQ = readUint16BE(payload, offset + 7);
+    const hQ = readUint16BE(payload, offset + 9);
+    const angleQ = readUint16BE(payload, offset + 11);
+    const distance = readUint32BE(payload, offset + 13);
+    const style = payload[offset + 17];
+    if (style == 1) {
+      console.warn('BorderSolid style is deprecated, please use CornerOnly with color to achieve the same effect');
+    }
+    const color = readUint32BE(payload, offset + 18);
+    const typeLength = payload[offset + 22];
+    
     const typeStart = offset + MOSP_BBOX_FIXED_SIZE;
     const typeEnd = typeStart + typeLength;
 
@@ -177,14 +198,6 @@ export class MOSPParser {
       return null;
     }
 
-    const objectID = readUint16BE(payload, offset);
-    const confidenceQ = payload[offset + 3];
-    const xQ = readUint16BE(payload, offset + 4);
-    const yQ = readUint16BE(payload, offset + 6);
-    const wQ = readUint16BE(payload, offset + 8);
-    const hQ = readUint16BE(payload, offset + 10);
-    const angleQ = readUint16BE(payload, offset + 12);
-    const distance = readUint32BE(payload, offset + 14);
     const type = this.decoder.decode(payload.slice(typeStart, typeEnd));
 
     return {
@@ -198,7 +211,9 @@ export class MOSPParser {
         cy: quantizedWordToUnit(yQ),
         width: quantizedWordToUnit(wQ),
         height: quantizedWordToUnit(hQ),
-        angle: this.quantizedWordToDegrees(angleQ)
+        angle: this.quantizedWordToDegrees(angleQ),
+        style: style,
+        color: color
       },
       distance
     };

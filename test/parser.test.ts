@@ -50,12 +50,15 @@ function createBBoxItemPayload(input: {
   height: number;
   angle: number;
   distance: number;
+  style?: number;
+  color?: number;
 }): Uint8Array {
   const typeBytes = encoder.encode(input.type);
+  const style = input.style ?? 1; // Default to BorderSolid
+  const color = input.color ?? 0xFF0000FF; // Default to red
 
   return new Uint8Array([
     ...uint16Bytes(input.id),
-    typeBytes.length,
     encodeConfidence(input.confidence),
     ...uint16Bytes(encodeUnit(input.cx)),
     ...uint16Bytes(encodeUnit(input.cy)),
@@ -63,6 +66,9 @@ function createBBoxItemPayload(input: {
     ...uint16Bytes(encodeUnit(input.height)),
     ...uint16Bytes(encodeAngle(input.angle)),
     ...uint32Bytes(input.distance),
+    style,
+    ...uint32Bytes(color),
+    typeBytes.length,
     ...typeBytes
   ]);
 }
