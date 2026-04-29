@@ -40,6 +40,17 @@
 
     shared.setOverlayMedia(overlayProxy);
 
+    function getSelectedCore() {
+      var playerType = shared.playerType || shared.elements.playerType.value;
+      if (playerType === 'h265web_mse_hevc') {
+        return 'mse_hevc';
+      }
+      if (playerType === 'h265web_wasm_hevc') {
+        return 'wasm_hevc';
+      }
+      return 'webcodec_hevc';
+    }
+
     function dispatchProxyEvent(type) {
       overlayProxy.dispatchEvent(new Event(type));
     }
@@ -146,6 +157,7 @@
       player = H265webjsPlayer();
       wireCallbacks(player);
 
+      var core = getSelectedCore();
       var buildRet = player.build({
         player_id: 'h265PlayerHost',
         base_url: './h265web.js/',
@@ -156,7 +168,7 @@
         width: '100%',
         height: '100%',
         color: 'black',
-        core: 'mse_hevc',
+        core: core,
         auto_play: true,
         readframe_multi_times: -1,
         ignore_audio: false

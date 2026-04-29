@@ -57,13 +57,15 @@
           <button id="toggleDebugBtn">隐藏调试</button>
           <select id="playerType" aria-label="选择播放器" title="选择播放器">
             <option value="mpegts">mpegts.js</option>
-            <option value="h265web">h265web.js</option>
+            <option value="h265web_mse_hevc">h265web.js(mse)</option>
+            <option value="h265web_webcodec_hevc">h265web.js(webcodec)</option>
+            <option value="h265web_wasm_hevc">h265web.js(wasm)</option>
           </select>
           <input
             type="text"
             id="streamUrl"
             placeholder="输入直播流地址"
-            value="http://192.168.88.91:7777/live/livestream1.live.ts"
+            value="http://192.168.88.91:7777/live/livestream.live.ts"
           >
         </div>
       </div>
@@ -177,9 +179,17 @@
         labelFields: ['object_id', 'type', 'confidence']
       });
 
+      function isH265webType(type) {
+        return type === 'h265web_mse_hevc' ||
+          type === 'h265web_webcodec_hevc' ||
+          type === 'h265web_wasm_hevc';
+      }
+
       const playerFactories = {
         mpegts: window.createMpegtsDemoPlayer,
-        h265web: window.createH265webDemoPlayer
+        h265web_mse_hevc: window.createH265webDemoPlayer,
+        h265web_webcodec_hevc: window.createH265webDemoPlayer,
+        h265web_wasm_hevc: window.createH265webDemoPlayer
       };
 
       let currentPlayerType = elements.playerType.value || 'mpegts';
@@ -279,7 +289,7 @@
       }
 
       function togglePlayerView(type) {
-        const useH265 = type === 'h265web';
+        const useH265 = isH265webType(type);
         elements.videoElement.classList.toggle('hidden', useH265);
         elements.h265PlayerHost.classList.toggle('hidden', !useH265);
         elements.overlayProxy.classList.toggle('hidden', !useH265);
@@ -288,6 +298,7 @@
       function buildSharedApi() {
         return {
           elements,
+          playerType: currentPlayerType,
           overlay,
           resetOverlayData,
           updatePlayPauseLabel,
