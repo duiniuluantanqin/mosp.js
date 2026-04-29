@@ -12,6 +12,8 @@
       <div class="video-section">
         <div id="videoContainer">
           <video id="videoElement"></video>
+          <div id="h265PlayerHost" class="hidden"></div>
+          <div id="overlayProxy" class="hidden" aria-hidden="true"></div>
 
           <div class="debug-panel" id="debugPanel">
             <h3>调试面板</h3>
@@ -41,7 +43,7 @@
                 <span class="debug-value" id="lastBufferedTimestamp">--</span>
               </div>
               <div class="debug-item">
-                <span class="debug-label">bbox个数</span>
+                <span class="debug-label">BBox 个数</span>
                 <span class="debug-value" id="bboxCount">--</span>
               </div>
             </div>
@@ -52,11 +54,15 @@
           <button id="playPauseBtn">播放</button>
           <button id="stopBtn">停止</button>
           <button id="fullscreenBtn">全屏</button>
-          <button id="toggleDebugBtn">关闭调试面板</button>
+          <button id="toggleDebugBtn">隐藏调试</button>
+          <select id="playerType" aria-label="选择播放器" title="选择播放器">
+            <option value="mpegts">mpegts.js</option>
+            <option value="h265web">h265web.js</option>
+          </select>
           <input
             type="text"
             id="streamUrl"
-            placeholder="输入 MPEG-TS 流地址"
+            placeholder="输入直播流地址"
             value="http://192.168.88.91:7777/live/livestream1.live.ts"
           >
         </div>
@@ -106,63 +112,11 @@
     </div>
   </div>
 
-  <script src="mpegts.js"></script>
   <script src="../dist/mosp.js"></script>
-
+  <script src="./mpegts-demo.js"></script>
+  <script src="./h265web-demo.js"></script>
   <script>
     (function() {
-      const videoElement = document.getElementById('videoElement');
-      const streamUrlInput = document.getElementById('streamUrl');
-      const playPauseBtn = document.getElementById('playPauseBtn');
-      const stopBtn = document.getElementById('stopBtn');
-      const fullscreenBtn = document.getElementById('fullscreenBtn');
-      const toggleDebugBtn = document.getElementById('toggleDebugBtn');
-      const videoContainer = document.getElementById('videoContainer');
-      const debugPanel = document.getElementById('debugPanel');
-      const globalLineWidth = document.getElementById('globalLineWidth');
-      const globalLineWidthValue = document.getElementById('globalLineWidthValue');
-      const maxDetectionFrames = document.getElementById('maxDetectionFrames');
-      const maxDetectionFramesValue = document.getElementById('maxDetectionFramesValue');
-      const showObjectId = document.getElementById('showObjectId');
-      const showType = document.getElementById('showType');
-      const showConfidence = document.getElementById('showConfidence');
-      const showItemDuration = document.getElementById('showItemDuration');
-      const videoTimestamp = document.getElementById('videoTimestamp');
-      const seiTimestamp = document.getElementById('seiTimestamp');
-      const timestampDiff = document.getElementById('timestampDiff');
-      const bufferedFrames = document.getElementById('bufferedFrames');
-      const firstBufferedTimestamp = document.getElementById('firstBufferedTimestamp');
-      const lastBufferedTimestamp = document.getElementById('lastBufferedTimestamp');
-      const bboxCount = document.getElementById('bboxCount');
-
-      let player = null;
-      let currentUrl = '';
-      let debugPanelRafId = null;
-      let debugPanelVisible = true;
-      const LIVE_EDGE_MIN_REMAIN = 0.5;
-      const LIVE_EDGE_MAX_LATENCY = 1.5;
-
-      const overlay = new mosp.MOSPOverlay({
-        maxDetectionFrames: 400,
-        lineWidth: 2,
-        labelFields: ['object_id', 'type', 'confidence']
-      });
-
-      overlay.attachMedia(videoElement);
-
-      function resetOverlayData() {
-        overlay.clear();
-      }
-
-      function updateLabelFields() {
-        const fields = [];
-        if (showObjectId.checked) fields.push('object_id');
-        if (showType.checked) fields.push('type');
-        if (showConfidence.checked) fields.push('confidence');
-        if (showItemDuration.checked) fields.push('item_duration');
-        overlay.configure({ labelFields: fields });
-      }
-
       function formatTimestamp(ms) {
         if (typeof ms !== 'number' || !Number.isFinite(ms)) {
           return '--';
@@ -174,10 +128,10 @@
         const seconds = Math.floor((totalMs % 60000) / 1000);
         const millis = totalMs % 1000;
 
-        const pad2 = (v) => v.toString().padStart(2, '0');
-        const pad3 = (v) => v.toString().padStart(3, '0');
-
-        return `${pad2(hours)}:${pad2(minutes)}:${pad2(seconds)}.${pad3(millis)}`;
+        return String(hours).padStart(2, '0') + ':' +
+          String(minutes).padStart(2, '0') + ':' +
+          String(seconds).padStart(2, '0') + '.' +
+          String(millis).padStart(3, '0');
       }
 
       function formatDiff(ms) {
@@ -188,19 +142,82 @@
         return (ms >= 0 ? '+' : '') + ms.toFixed(1) + ' ms';
       }
 
+      const elements = {
+        videoElement: document.getElementById('videoElement'),
+        h265PlayerHost: document.getElementById('h265PlayerHost'),
+        overlayProxy: document.getElementById('overlayProxy'),
+        playPauseBtn: document.getElementById('playPauseBtn'),
+        stopBtn: document.getElementById('stopBtn'),
+        fullscreenBtn: document.getElementById('fullscreenBtn'),
+        toggleDebugBtn: document.getElementById('toggleDebugBtn'),
+        playerType: document.getElementById('playerType'),
+        streamUrl: document.getElementById('streamUrl'),
+        videoContainer: document.getElementById('videoContainer'),
+        debugPanel: document.getElementById('debugPanel'),
+        globalLineWidth: document.getElementById('globalLineWidth'),
+        globalLineWidthValue: document.getElementById('globalLineWidthValue'),
+        maxDetectionFrames: document.getElementById('maxDetectionFrames'),
+        maxDetectionFramesValue: document.getElementById('maxDetectionFramesValue'),
+        showObjectId: document.getElementById('showObjectId'),
+        showType: document.getElementById('showType'),
+        showConfidence: document.getElementById('showConfidence'),
+        showItemDuration: document.getElementById('showItemDuration'),
+        videoTimestamp: document.getElementById('videoTimestamp'),
+        seiTimestamp: document.getElementById('seiTimestamp'),
+        timestampDiff: document.getElementById('timestampDiff'),
+        bufferedFrames: document.getElementById('bufferedFrames'),
+        firstBufferedTimestamp: document.getElementById('firstBufferedTimestamp'),
+        lastBufferedTimestamp: document.getElementById('lastBufferedTimestamp'),
+        bboxCount: document.getElementById('bboxCount')
+      };
+
+      const overlay = new mosp.MOSPOverlay({
+        maxDetectionFrames: 400,
+        lineWidth: 2,
+        labelFields: ['object_id', 'type', 'confidence']
+      });
+
+      const playerFactories = {
+        mpegts: window.createMpegtsDemoPlayer,
+        h265web: window.createH265webDemoPlayer
+      };
+
+      let currentPlayerType = elements.playerType.value || 'mpegts';
+      let currentController = null;
+      let debugPanelVisible = true;
+      let debugPanelRafId = null;
+
+      function setOverlayMedia(mediaElement) {
+        overlay.detachMedia();
+        overlay.attachMedia(mediaElement);
+      }
+
+      function resetOverlayData() {
+        overlay.clear();
+      }
+
+      function updateLabelFields() {
+        const fields = [];
+        if (elements.showObjectId.checked) fields.push('object_id');
+        if (elements.showType.checked) fields.push('type');
+        if (elements.showConfidence.checked) fields.push('confidence');
+        if (elements.showItemDuration.checked) fields.push('item_duration');
+        overlay.configure({ labelFields: fields });
+      }
+
       function renderDebugPanel() {
         const debugInfo = overlay.getDebugInfo();
         const matchedFramesText = debugInfo.matchedFrameIndex === null
-          ? `--/${debugInfo.bufferedFrames}`
-          : `${debugInfo.matchedFrameIndex}/${debugInfo.bufferedFrames}`;
+          ? '--/' + debugInfo.bufferedFrames
+          : debugInfo.matchedFrameIndex + '/' + debugInfo.bufferedFrames;
 
-        videoTimestamp.textContent = formatTimestamp(debugInfo.videoCurrentTimeMs);
-        seiTimestamp.textContent = formatTimestamp(debugInfo.seiPtsMs);
-        timestampDiff.textContent = formatDiff(debugInfo.diffMs);
-        bufferedFrames.textContent = matchedFramesText;
-        firstBufferedTimestamp.textContent = formatTimestamp(debugInfo.firstBufferedPtsMs);
-        lastBufferedTimestamp.textContent = formatTimestamp(debugInfo.lastBufferedPtsMs);
-        bboxCount.textContent = debugInfo.bboxCount.toString();
+        elements.videoTimestamp.textContent = formatTimestamp(debugInfo.videoCurrentTimeMs);
+        elements.seiTimestamp.textContent = formatTimestamp(debugInfo.seiPtsMs);
+        elements.timestampDiff.textContent = formatDiff(debugInfo.diffMs);
+        elements.bufferedFrames.textContent = matchedFramesText;
+        elements.firstBufferedTimestamp.textContent = formatTimestamp(debugInfo.firstBufferedPtsMs);
+        elements.lastBufferedTimestamp.textContent = formatTimestamp(debugInfo.lastBufferedPtsMs);
+        elements.bboxCount.textContent = String(debugInfo.bboxCount);
         debugPanelRafId = requestAnimationFrame(renderDebugPanel);
       }
 
@@ -208,7 +225,6 @@
         if (debugPanelRafId !== null) {
           return;
         }
-
         renderDebugPanel();
       }
 
@@ -216,42 +232,39 @@
         if (debugPanelRafId === null) {
           return;
         }
-
         cancelAnimationFrame(debugPanelRafId);
         debugPanelRafId = null;
       }
 
-      function updateDebugToggleButton() {
-        toggleDebugBtn.textContent = debugPanelVisible ? '关闭调试面板' : '打开调试面板';
-      }
-
       function setDebugPanelVisible(visible) {
         debugPanelVisible = visible;
-        debugPanel.classList.toggle('hidden', !visible);
-        updateDebugToggleButton();
+        elements.debugPanel.classList.toggle('hidden', !visible);
+        elements.toggleDebugBtn.textContent = visible ? '隐藏调试' : '显示调试';
+      }
+
+      function updatePlayPauseLabel(isPaused) {
+        elements.playPauseBtn.textContent = isPaused ? '播放' : '暂停';
       }
 
       function getFullscreenElement() {
         return document.fullscreenElement || document.webkitFullscreenElement || null;
       }
 
-      function isVideoContainerFullscreen() {
-        return getFullscreenElement() === videoContainer;
+      function isContainerFullscreen() {
+        return getFullscreenElement() === elements.videoContainer;
       }
 
       function updateFullscreenButton() {
-        fullscreenBtn.textContent = isVideoContainerFullscreen() ? '退出全屏' : '全屏';
+        elements.fullscreenBtn.textContent = isContainerFullscreen() ? '退出全屏' : '全屏';
       }
 
       function requestContainerFullscreen() {
-        if (videoContainer.requestFullscreen) {
-          return videoContainer.requestFullscreen();
+        if (elements.videoContainer.requestFullscreen) {
+          return elements.videoContainer.requestFullscreen();
         }
-
-        if (videoContainer.webkitRequestFullscreen) {
-          return videoContainer.webkitRequestFullscreen();
+        if (elements.videoContainer.webkitRequestFullscreen) {
+          return elements.videoContainer.webkitRequestFullscreen();
         }
-
         return Promise.reject(new Error('Fullscreen API is not supported'));
       }
 
@@ -259,138 +272,125 @@
         if (document.exitFullscreen) {
           return document.exitFullscreen();
         }
-
         if (document.webkitExitFullscreen) {
           return document.webkitExitFullscreen();
         }
-
         return Promise.reject(new Error('Fullscreen exit is not supported'));
       }
 
-      function destroyPlayer() {
-        if (!player) {
-          return;
-        }
-
-        player.destroy();
-        player = null;
+      function togglePlayerView(type) {
+        const useH265 = type === 'h265web';
+        elements.videoElement.classList.toggle('hidden', useH265);
+        elements.h265PlayerHost.classList.toggle('hidden', !useH265);
+        elements.overlayProxy.classList.toggle('hidden', !useH265);
       }
 
-      function createPlayer(url) {
-        player = mpegts.createPlayer({
-          type: 'mse',
-          isLive: true,
-          url
-        }, {
-          enableWorker: true,
-          lazyLoadMaxDuration: 3 * 60,
-          seekType: 'range',
-          liveBufferLatencyChasing: true
-        });
+      function buildSharedApi() {
+        return {
+          elements,
+          overlay,
+          resetOverlayData,
+          updatePlayPauseLabel,
+          setOverlayMedia,
+          ensureScript: function(id, src) {
+            return new Promise(function(resolve, reject) {
+              var existing = document.getElementById(id);
+              if (existing) {
+                if (existing.dataset.loaded === 'true') {
+                  resolve();
+                  return;
+                }
 
-        player.attachMediaElement(videoElement);
+                existing.addEventListener('load', function onLoad() {
+                  existing.removeEventListener('load', onLoad);
+                  resolve();
+                });
+                existing.addEventListener('error', function onError() {
+                  existing.removeEventListener('error', onError);
+                  reject(new Error('Failed to load script: ' + src));
+                });
+                return;
+              }
 
-        player.on(mpegts.Events.ERROR, function(errorType, errorDetail, errorInfo) {
-          console.error('Player error:', errorType, errorDetail, errorInfo);
-        });
-
-        player.on(mpegts.Events.MEDIA_INFO, function(mediaInfo) {
-          console.log('Media info:', mediaInfo);
-        });
-
-        player.on(mpegts.Events.SEI_ARRIVED, function(data) {
-          overlay.pushData(data);
-        });
-
-        player.load();
-        currentUrl = url;
+              var script = document.createElement('script');
+              script.id = id;
+              script.src = src;
+              script.async = false;
+              script.onload = function() {
+                script.dataset.loaded = 'true';
+                resolve();
+              };
+              script.onerror = function() {
+                reject(new Error('Failed to load script: ' + src));
+              };
+              document.body.appendChild(script);
+            });
+          }
+        };
       }
 
-      function updatePlayPauseButton() {
-        if (!player) {
-          playPauseBtn.textContent = '播放';
-          return;
+      function switchPlayer(type) {
+        if (currentController && typeof currentController.destroy === 'function') {
+          currentController.destroy();
         }
 
-        playPauseBtn.textContent = videoElement.paused ? '播放' : '暂停';
-      }
-
-      playPauseBtn.onclick = function() {
-        if (!player) {
-          const url = streamUrlInput.value.trim();
-
-          if (!url) {
-            alert('请输入流地址');
-            return;
-          }
-
-          if (typeof mpegts === 'undefined') {
-            alert('mpegts.js 未加载，请检查示例文件');
-            return;
-          }
-
-          if (!mpegts.getFeatureList().mseLivePlayback) {
-            alert('当前浏览器不支持 MSE');
-            return;
-          }
-
-          if (currentUrl !== url) {
-            destroyPlayer();
-            resetOverlayData();
-            createPlayer(url);
-          }
-
-          player.play();
-          overlay.show();
-          updatePlayPauseButton();
-        } else {
-          if (videoElement.paused) {
-            player.play();
-          } else {
-            player.pause();
-          }
-          updatePlayPauseButton();
-        }
-      };
-
-      stopBtn.onclick = function() {
-        if (!player) {
-          return;
-        }
-
-        destroyPlayer();
+        currentPlayerType = type;
+        togglePlayerView(type);
         resetOverlayData();
-        currentUrl = '';
-        updatePlayPauseButton();
-      };
 
-      fullscreenBtn.onclick = function() {
-        const action = isVideoContainerFullscreen() ? exitFullscreen() : requestContainerFullscreen();
+        const factory = playerFactories[type];
+        if (!factory) {
+          currentController = null;
+          updatePlayPauseLabel(true);
+          return;
+        }
 
+        currentController = factory(buildSharedApi());
+        updatePlayPauseLabel(true);
+      }
+
+      elements.toggleDebugBtn.addEventListener('click', function() {
+        setDebugPanelVisible(!debugPanelVisible);
+      });
+
+      elements.fullscreenBtn.addEventListener('click', function() {
+        const action = isContainerFullscreen() ? exitFullscreen() : requestContainerFullscreen();
         Promise.resolve(action).catch(function(error) {
           console.error('Fullscreen error:', error);
           alert('当前环境不支持全屏或切换失败');
         });
-      };
+      });
 
-      toggleDebugBtn.onclick = function() {
-        setDebugPanelVisible(!debugPanelVisible);
-      };
-
-      globalLineWidth.oninput = function(event) {
-        globalLineWidthValue.textContent = event.target.value;
+      elements.globalLineWidth.addEventListener('input', function(event) {
+        elements.globalLineWidthValue.textContent = event.target.value;
         overlay.configure({ lineWidth: parseInt(event.target.value, 10) });
-      };
+      });
 
-      maxDetectionFrames.oninput = function(event) {
-        maxDetectionFramesValue.textContent = event.target.value;
+      elements.maxDetectionFrames.addEventListener('input', function(event) {
+        elements.maxDetectionFramesValue.textContent = event.target.value;
         overlay.configure({ maxDetectionFrames: parseInt(event.target.value, 10) });
-      };
+      });
 
-      showObjectId.onchange = updateLabelFields;
-      showType.onchange = updateLabelFields;
-      showConfidence.onchange = updateLabelFields;
-      showItemDuration.onchange = updateLabelFields;
+      elements.showObjectId.addEventListener('change', updateLabelFields);
+      elements.showType.addEventListener('change', updateLabelFields);
+      elements.showConfidence.addEventListener('change', updateLabelFields);
+      elements.showItemDuration.addEventListener('change', updateLabelFields);
+
+      elements.playerType.addEventListener('change', function(event) {
+        switchPlayer(event.target.value);
+      });
+
+      elements.playPauseBtn.addEventListener('click', function() {
+        if (currentController && typeof currentController.togglePlayPause === 'function') {
+          currentController.togglePlayPause();
+        }
+      });
+
+      elements.stopBtn.addEventListener('click', function() {
+        if (currentController && typeof currentController.stop === 'function') {
+          currentController.stop();
+        }
+      });
 
       document.addEventListener('fullscreenchange', function() {
         updateFullscreenButton();
@@ -402,27 +402,22 @@
         window.dispatchEvent(new Event('resize'));
       });
 
-      videoElement.addEventListener('play', function() {
-        updatePlayPauseButton();
-      });
-
-      videoElement.addEventListener('pause', function() {
-        updatePlayPauseButton();
-      });
-
       window.addEventListener('beforeunload', function() {
         stopDebugPanel();
-        destroyPlayer();
+        if (currentController && typeof currentController.destroy === 'function') {
+          currentController.destroy();
+        }
         overlay.detachMedia();
       });
 
       updateLabelFields();
-      globalLineWidthValue.textContent = globalLineWidth.value;
-      maxDetectionFramesValue.textContent = maxDetectionFrames.value;
+      elements.globalLineWidthValue.textContent = elements.globalLineWidth.value;
+      elements.maxDetectionFramesValue.textContent = elements.maxDetectionFrames.value;
       updateFullscreenButton();
-      updatePlayPauseButton();
       setDebugPanelVisible(true);
+      togglePlayerView(currentPlayerType);
       startDebugPanel();
+      switchPlayer(currentPlayerType);
     })();
   </script>
 </body>

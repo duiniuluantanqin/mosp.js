@@ -40,7 +40,6 @@ h1 {
   padding: 20px;
 }
 
-.status-bar,
 .type-config {
   background: #fafafa;
   border: 1px solid #e3e3e3;
@@ -74,11 +73,45 @@ h1 {
   object-fit: contain;
 }
 
+#videoElement.hidden,
+#h265PlayerHost.hidden,
+#overlayProxy.hidden {
+  display: none;
+}
+
+#h265PlayerHost {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+#h265PlayerHost canvas,
+#h265PlayerHost video {
+  width: 100% !important;
+  height: 100% !important;
+  display: block;
+}
+
+#overlayProxy {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+}
+
 .player-controls {
   display: flex;
   gap: 10px;
   flex-wrap: wrap;
   align-items: center;
+}
+
+.player-controls button,
+.player-controls select,
+.player-controls input[type="text"] {
+  flex: 0 0 auto;
 }
 
 .debug-panel {
@@ -145,8 +178,25 @@ h1 {
 }
 
 #streamUrl {
-  flex: 1 1 280px;
-  min-width: 220px;
+  flex: 1 1 320px !important;
+  min-width: 260px;
+}
+
+#playerType {
+  width: 160px;
+  min-width: 160px;
+  padding-right: 42px;
+  background-image:
+    linear-gradient(45deg, transparent 50%, #666 50%),
+    linear-gradient(135deg, #666 50%, transparent 50%);
+  background-position:
+    calc(100% - 18px) calc(50% - 3px),
+    calc(100% - 12px) calc(50% - 3px);
+  background-size:
+    6px 6px,
+    6px 6px;
+  background-repeat: no-repeat;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .control-panel {
@@ -188,7 +238,6 @@ button {
   background: #f3f3f3;
   color: #222;
   font-size: 14px;
-  cursor: pointer;
 }
 
 button:hover {
@@ -219,7 +268,6 @@ input[type="color"] {
   border: 1px solid #cfcfcf;
   border-radius: 6px;
   background: #fff;
-  cursor: pointer;
 }
 
 input[type="text"] {
@@ -248,7 +296,8 @@ select {
 
 select:focus {
   outline: none;
-  border-color: #999;
+  border-color: #4f83bd;
+  box-shadow: 0 0 0 3px rgba(79, 131, 189, 0.18);
 }
 
 input[type="range"] {
@@ -265,7 +314,6 @@ input[type="range"] {
   display: flex;
   align-items: center;
   margin-bottom: 0;
-  cursor: pointer;
 }
 
 .checkbox-group input[type="checkbox"] {
@@ -303,23 +351,6 @@ input[type="range"] {
 }
 
 .slider-control-header label {
-  margin-bottom: 0;
-}
-
-.status-bar {
-  padding: 12px;
-  margin-top: 15px;
-  font-size: 13px;
-  color: #555;
-}
-
-.status-item {
-  display: flex;
-  justify-content: space-between;
-  margin-bottom: 6px;
-}
-
-.status-item:last-child {
   margin-bottom: 0;
 }
 
